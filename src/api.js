@@ -1,7 +1,8 @@
 // ─── API Service Layer ────────────────────────────────────────────────────────
-// Single place for all backend calls. Token stored in memory (cleared on logout).
+// Single place for all backend calls. Token stored in memory (cleared on logout)
+const BASE = import.meta.env.https://egg-mart-backend.onrender.com || 'http://localhost:3001'
 
-const BASE = 'http://localhost:3001'
+
 
 let _token = null
 
