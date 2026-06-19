@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css');
+
+/* ── Dark theme (default) ── */
+:root {
+  --bg0:        #0d1117;
+  --bg1:        #161b22;
+  --bg2:        #1c2128;
+  --bg3:        #252b34;
+  --border:     #30363d;
+  --text:       #e6edf3;
+  --text2:      #8b949e;
+  --muted:      #6e7681;
+  --green:      #3fb950;
+  --green-dim:  #0d2016;
+  --green-text: #3fb950;
+  --blue:       #58a6ff;
+  --amber:      #d29922;
+  --red:        #f85149;
+  --purple:     #bc8cff;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg0:        #f0f2f5;
+  --bg1:        #ffffff;
+  --bg2:        #f6f8fa;
+  --bg3:        #eaeef2;
+  --border:     #d0d7de;
+  --text:       #1f2328;
+  --text2:      #57606a;
+  --muted:      #8c959f;
+  --green:      #1a7f37;
+  --green-dim:  #dafbe1;
+  --green-text: #1a7f37;
+  --blue:       #0969da;
+  --amber:      #bf8700;
+  --red:        #cf222e;
+  --purple:     #8250df;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg0);
+  color: var(--text);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+
+input, select, button, textarea { font-family: inherit; }
+
+/* Range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--green);
+  cursor: pointer;
+  border: 2px solid var(--bg1);
+  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
