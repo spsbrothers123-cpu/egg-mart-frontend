@@ -168,7 +168,7 @@ export default function SessionPage() {
 
   useEffect(() => {
     if (!token || role !== 'admin') return
-    fetch('http://localhost:3001/api/sessions', {
+    fetch(`${import.meta.env.VITE_API_URL}/api/sessions`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(r => r.ok ? r.json() : null)

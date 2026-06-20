@@ -110,20 +110,17 @@ export const inputStyle = {
   color: 'var(--text)', fontSize: 13, outline: 'none',
 }
 
-export function ModalActions({ onCancel, onConfirm, confirmLabel = 'Save', confirmColor = 'var(--green)', disabled = false }) {
+export function ModalActions({ onCancel, onConfirm, confirmLabel = 'Save', confirmColor = 'var(--green)' }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-      <button onClick={onCancel} disabled={disabled} style={{
+      <button onClick={onCancel} style={{
         padding: '10px', borderRadius: 8, border: '1px solid var(--border)',
-        background: 'var(--bg2)', color: 'var(--text2)', fontSize: 13,
-        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+        background: 'var(--bg2)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
       }}>Cancel</button>
-      <button onClick={onConfirm} disabled={disabled} style={{
-        padding: '10px', borderRadius: 8,
-        background: disabled ? 'var(--bg3)' : confirmColor,
-        color: disabled ? 'var(--muted)' : confirmColor === 'var(--green)' ? '#0a1a0a' : '#fff',
-        fontSize: 13, fontWeight: 600, border: 'none',
-        cursor: disabled ? 'not-allowed' : 'pointer',
+      <button onClick={onConfirm} style={{
+        padding: '10px', borderRadius: 8, background: confirmColor,
+        color: confirmColor === 'var(--green)' ? '#0a1a0a' : '#fff',
+        fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
       }}>{confirmLabel}</button>
     </div>
   )

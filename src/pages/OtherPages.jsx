@@ -4,56 +4,31 @@ import { PageHeader, AddButton, TableHeader, SaleBadge, StatusBadge, Modal, Form
 import { useApp } from '../App'
 import { CATEGORIES } from '../data'
 
-/* ─── Shared bill normaliser ─── */
-function normaliseBill(b) {
-  // Normalise payment_method to Title Case so Cash/Card/UPI filters work
-  // regardless of whether data comes from the API (lowercase) or local state
-  const rawMethod = b.payment_method ?? b.method ?? ''
-  const method = rawMethod.charAt(0).toUpperCase() + rawMethod.slice(1).toLowerCase()
-  return {
-    ...b,
-    date:     b.created_at ?? b.date,
-    total:    parseFloat(b.total),
-    method,
-    customer: b.customer_name ?? b.customer,
-    status:   b.payment_status ?? b.status,
-    items:    b.item_count ?? b.items ?? 0,
-  }
-}
-
-/* ─── Shared hook: fetch bills from API, fall back to local ─── */
-function useBills() {
-  const { transactions: localTx, token } = useApp()
-  const [transactions, setTransactions] = useState(() => localTx.map(normaliseBill))
-
-  useEffect(() => {
-    if (!token) {
-      setTransactions(localTx.map(normaliseBill))
-      return
-    }
-    fetch('http://localhost:3001/api/bills', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => {
-        // API is source of truth; also show any local bills not yet flushed to API
-        const apiIds = new Set(data.map(b => b.invoice_number))
-        const pendingLocal = localTx
-          .filter(t => !apiIds.has(t.id))
-          .map(normaliseBill)
-        setTransactions([...pendingLocal, ...data.map(normaliseBill)])
-      })
-      .catch(() => setTransactions(localTx.map(normaliseBill)))
-  // Re-run whenever localTx changes (new sale made) or token changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, localTx.length])
-
-  return transactions
-}
-
 /* ─── Reports ─── */
 export function ReportsPage() {
-  const transactions = useBills()
+  const { transactions: localTx, token } = useApp()
+  const [transactions, setTransactions] = useState(localTx)
+
+  useEffect(() => {
+    if (!token) { setTransactions(localTx); return }
+    fetch(`${import.meta.env.VITE_API_URL}/api/bills`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setTransactions(data.map(b => ({
+          ...b,
+          date:     b.created_at,
+          total:    parseFloat(b.total),
+          method:   b.payment_method,
+          customer: b.customer_name,
+          status:   b.payment_status,
+          items:    b.item_count ?? (b.items?.length ?? 0),
+        })))
+        else setTransactions(localTx)
+      })
+      .catch(() => setTransactions(localTx))
+  }, [token])
 
   const byMethod = (method) => transactions.filter(t => t.method === method)
   const sumAmt   = (arr)    => arr.reduce((s, t) => s + t.total, 0)
@@ -273,7 +248,29 @@ export function InventoryPage() {
 
 /* ─── History ─── */
 export function HistoryPage() {
-  const transactions = useBills()
+  const { transactions: localTx, token } = useApp()
+  const [transactions, setTransactions] = useState(localTx)
+
+  useEffect(() => {
+    if (!token) { setTransactions(localTx); return }
+    fetch(`${import.meta.env.VITE_API_URL}/api/bills`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setTransactions(data.map(b => ({
+          ...b,
+          date:     b.created_at,
+          total:    parseFloat(b.total),
+          method:   b.payment_method,
+          customer: b.customer_name,
+          status:   b.payment_status,
+          items:    b.item_count ?? (b.items?.length ?? 0),
+        })))
+        else setTransactions(localTx)
+      })
+      .catch(() => setTransactions(localTx))
+  }, [token])
 
   const all = transactions
 

@@ -19,17 +19,7 @@ import { PRODUCTS as DEFAULT_PRODUCTS } from './data'
 export const AppContext = createContext(null)
 export function useApp() { return useContext(AppContext) }
 
-const API = 'http://localhost:3001'
-
-// Maps backend product shape to what the frontend expects
-function normalizeProducts(raw) {
-  return raw.map(p => ({
-    ...p,
-    category: p.category_slug ?? p.category ?? 'other',
-    price:    parseFloat(p.price) || 0,
-    stock:    parseInt(p.stock)   || 0,
-  }))
-}
+const API = import.meta.env.VITE_API_URL
 
 // ─── Shared Store (single source of truth) ──────────────────────────────────
 let _sharedProducts     = DEFAULT_PRODUCTS
@@ -119,24 +109,10 @@ export default function App() {
   }
 
   // ─── Auth ────────────────────────────────────────────────────────────────
-  async function handleLogin(r, tok) {
+  function handleLogin(r, tok) {
     setRole(r)
-    setToken(tok || null)
+    setToken(tok || null)                           // store the JWT token
     setActive(r === 'admin' ? 'dashboard' : 'session-start')
-
-    // Load live products from backend immediately after login
-    if (tok) {
-      try {
-        const res = await fetch(`${API}/api/products`, {
-          headers: { 'Authorization': `Bearer ${tok}` },
-        })
-        if (res.ok) {
-          const raw = await res.json()
-          _sharedProducts = normalizeProducts(raw)
-          notify()
-        }
-      } catch (_) { /* stay with local default products */ }
-    }
   }
 
   // ─── Session management ──────────────────────────────────────────────────
@@ -265,84 +241,7 @@ export default function App() {
     }
   }
 
-  async function addTransaction(tx) {
-    // ── 1. Build items payload the backend expects ──────────────────────
-    const items = tx.cart.map(item => ({
-      product_id: item.id,
-      name:       item.name,
-      pack:       item.pack  ?? null,
-      price:      item.editPrice,
-      qty:        item.qty,
-    }))
-
-    const paymentMethodMap = { Cash: 'cash', Card: 'card', UPI: 'upi' }
-    const payment_method   = paymentMethodMap[tx.method] ?? 'cash'
-
-    // ── 2. POST to backend if token present ─────────────────────────────
-    if (token) {
-      try {
-        const res = await fetch(`${API}/api/bills`, {
-          method:  'POST',
-          headers: {
-            'Content-Type':  'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            customer_id:    null,
-            items,
-            discount_pct:   tx.discountPct ?? 0,
-            tax_pct:        _sharedTax     ?? 0,
-            payment_method,
-            notes:          null,
-          }),
-        })
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          showToast(err.error || 'Failed to save bill', 'error')
-          return null   // signal failure — cart stays intact
-        }
-
-        const bill = await res.json()
-
-        // ── 3. Refresh products so stock shows correctly in UI ───────────
-        try {
-          const prodRes = await fetch(`${API}/api/products`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          })
-          if (prodRes.ok) {
-            const raw = await prodRes.json()
-            _sharedProducts = normalizeProducts(raw)
-          }
-        } catch (_) { /* non-fatal */ }
-
-        // ── 4. Persist to local state ────────────────────────────────────
-        const newTx = {
-          ...tx,
-          id:         bill.invoice_number,
-          invoiceNum: _invoiceNum,
-          sessionId:  _sharedActiveSession?.id,
-          date:       bill.created_at || new Date().toISOString(),
-        }
-        _invoiceNum++
-        _sharedTransactions = [newTx, ..._sharedTransactions]
-        if (_sharedActiveSession) {
-          _sharedActiveSession = {
-            ..._sharedActiveSession,
-            transactions: [newTx, ...(_sharedActiveSession.transactions || [])],
-          }
-        }
-        notify()
-        return newTx
-
-      } catch (err) {
-        console.error('Bill save error:', err)
-        showToast('Server unreachable — bill not saved', 'error')
-        return null
-      }
-    }
-
-    // ── Offline / no-token fallback ──────────────────────────────────────
+  function addTransaction(tx) {
     const newTx = {
       ...tx,
       id:         `INV-${String(_invoiceNum).padStart(6, '0')}`,
@@ -352,11 +251,6 @@ export default function App() {
     }
     _invoiceNum++
     _sharedTransactions = [newTx, ..._sharedTransactions]
-    // Deduct stock locally in offline mode
-    _sharedProducts = _sharedProducts.map(p => {
-      const cartItem = tx.cart.find(i => i.id === p.id)
-      return cartItem ? { ...p, stock: p.stock - cartItem.qty } : p
-    })
     if (_sharedActiveSession) {
       _sharedActiveSession = {
         ..._sharedActiveSession,

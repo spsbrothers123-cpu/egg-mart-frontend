@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { EggIcon } from '../components/UI'
 
-const API = 'http://localhost:3001'
+const API = import.meta.env.VITE_API_URL
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')

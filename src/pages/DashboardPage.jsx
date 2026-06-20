@@ -1,44 +1,7 @@
-import { useState, useEffect } from 'react'
 import { useApp } from '../App'
 
-function normaliseBill(b) {
-  const rawMethod = b.payment_method ?? b.method ?? ''
-  const method = rawMethod.charAt(0).toUpperCase() + rawMethod.slice(1).toLowerCase()
-  return {
-    ...b,
-    id:       b.id ?? b.invoiceNum,
-    date:     b.created_at ?? b.date,
-    total:    parseFloat(b.total),
-    method,
-    customer: b.customer_name ?? b.customer ?? 'Walk-in Customer',
-    status:   b.payment_status ?? b.status,
-    items:    b.item_count ?? b.items ?? 0,
-  }
-}
-
 export default function DashboardPage() {
-  const { transactions: localTx, products, token } = useApp()
-  const [allTx, setAllTx] = useState(() => localTx.map(normaliseBill))
-
-  // Fetch from API whenever a new local transaction is added or on mount
-  useEffect(() => {
-    if (!token) {
-      setAllTx(localTx.map(normaliseBill))
-      return
-    }
-    fetch('http://localhost:3001/api/bills', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && data.length > 0) setAllTx(data.map(normaliseBill))
-        else setAllTx(localTx.map(normaliseBill))
-      })
-      .catch(() => setAllTx(localTx.map(normaliseBill)))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, localTx.length])
-
-  const transactions = allTx
+  const { transactions, products } = useApp()
 
   const now      = new Date()
   const today    = now.toDateString()

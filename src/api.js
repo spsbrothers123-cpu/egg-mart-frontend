@@ -1,8 +1,7 @@
 // ─── API Service Layer ────────────────────────────────────────────────────────
-// Single place for all backend calls. Token stored in memory (cleared on logout)
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Single place for all backend calls. Token stored in memory (cleared on logout).
 
-
+const BASE = import.meta.env.VITE_API_URL
 
 let _token = null
 

@@ -196,7 +196,6 @@ export default function BillingPage() {
   const [payMethod,   setPayMethod]   = useState('Cash')
   const [collected,   setCollected]   = useState('')
   const [paidSuccess, setPaidSuccess] = useState(false)
-  const [paying,      setPaying]      = useState(false)
   const [heldBills,   setHeldBills]   = useState([])
   const [showHeld,    setShowHeld]    = useState(false)
 
@@ -242,31 +241,25 @@ export default function BillingPage() {
   const effectiveName = customerName.trim() || 'Walk-in Customer'
 
   async function handlePay() {
-    if (paying) return          // prevent double-submit
-    setPaying(true)
-    try {
-      const tx = {
-        date:        new Date(),
-        customer:    effectiveName,
-        items:       cart.length,
-        total,
-        subtotal,
-        tax:         taxAmt,
-        discount:    discountAmt,
-        discountPct: discount,
-        method:      payMethod,
-        status:      'paid',
-        cart:        [...cart],
-      }
-      const result = await addTransaction(tx)
-      if (result) {
-        setCart([]); setDiscount(0); setPayModal(false)
-        setCollected(''); setCustomerName(''); setPayMethod('Cash')
-        setPaidSuccess(true)
-        setTimeout(() => setPaidSuccess(false), 2500)
-      }
-    } finally {
-      setPaying(false)
+    const tx = {
+      date:        new Date(),
+      customer:    effectiveName,
+      items:       cart.length,
+      total,
+      subtotal,
+      tax:         taxAmt,
+      discount:    discountAmt,
+      discountPct: discount,
+      method:      payMethod,
+      status:      'paid',
+      cart:        [...cart],
+    }
+    const result = await addTransaction(tx)
+    if (result) {
+      setCart([]); setDiscount(0); setPayModal(false)
+      setCollected(''); setCustomerName(''); setPayMethod('Cash')
+      setPaidSuccess(true)
+      setTimeout(() => setPaidSuccess(false), 2500)
     }
   }
 
@@ -564,10 +557,9 @@ export default function BillingPage() {
         )}
 
         <ModalActions
-          onCancel={() => !paying && setPayModal(false)}
+          onCancel={() => setPayModal(false)}
           onConfirm={handlePay}
-          confirmLabel={paying ? 'Processing...' : `Confirm ${payMethod} Pay`}
-          disabled={paying}
+          confirmLabel={`Confirm ${payMethod} Pay`}
         />
       </Modal>
 
