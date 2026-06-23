@@ -241,25 +241,80 @@ export default function App() {
     }
   }
 
-  function addTransaction(tx) {
-    const newTx = {
-      ...tx,
-      id:         `INV-${String(_invoiceNum).padStart(6, '0')}`,
-      invoiceNum: _invoiceNum,
-      sessionId:  _sharedActiveSession?.id,
-      date:       tx.date || new Date().toISOString(),
-    }
-    _invoiceNum++
-    _sharedTransactions = [newTx, ..._sharedTransactions]
-    if (_sharedActiveSession) {
-      _sharedActiveSession = {
-        ..._sharedActiveSession,
-        transactions: [newTx, ...(_sharedActiveSession.transactions || [])],
+  async function addTransaction(tx) {
+  // If we have a token, persist to backend (which deducts stock)
+  if (token) {
+    try {
+      const payload = {
+        customer_id:    null,                   // or pass customer_id if you add that
+        items: tx.cart.map(i => ({
+          product_id: i.id,
+          name:       i.name,
+          pack:       i.pack ?? null,
+          price:      i.editPrice,
+          qty:        i.qty,
+        })),
+        discount_pct:   tx.discountPct  || 0,
+        tax_pct:        tx.tax          ? (tx.tax / tx.subtotal * 100) : 0,
+        payment_method: tx.method?.toLowerCase() === 'upi'  ? 'upi'
+                       : tx.method?.toLowerCase() === 'card' ? 'card'
+                       : 'cash',
+        notes: tx.customer !== 'Walk-in Customer' ? tx.customer : null,
       }
+
+      const res = await fetch(`${API}/api/bills`, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        showToast(err.error || 'Failed to save bill', 'error')
+        return null
+      }
+
+      const bill = await res.json()
+
+      // Deduct stock locally so UI reflects immediately
+      setProducts(prev => prev.map(p => {
+        const item = tx.cart.find(i => i.id === p.id)
+        return item ? { ...p, stock: (p.stock ?? 0) - item.qty } : p
+      }))
+
+      const newTx = { ...tx, id: bill.invoice_number, invoiceNum: bill.id, sessionId: _sharedActiveSession?.id }
+      _sharedTransactions = [newTx, ..._sharedTransactions]
+      if (_sharedActiveSession) {
+        _sharedActiveSession = { ..._sharedActiveSession, transactions: [newTx, ...(_sharedActiveSession.transactions || [])] }
+      }
+      notify()
+      return newTx
+
+    } catch (err) {
+      console.error('Bill API error:', err)
+      showToast('Server error saving bill', 'error')
+      return null
     }
-    notify()
-    return newTx
   }
+
+  // Offline / no-token fallback (local only)
+  const newTx = { ...tx, id: `INV-${String(_invoiceNum).padStart(6, '0')}`, invoiceNum: _invoiceNum, sessionId: _sharedActiveSession?.id }
+  _invoiceNum++
+  _sharedTransactions = [newTx, ..._sharedTransactions]
+  // Deduct stock locally
+  setProducts(prev => prev.map(p => {
+    const item = tx.cart.find(i => i.id === p.id)
+    return item ? { ...p, stock: (p.stock ?? 0) - item.qty } : p
+  }))
+  if (_sharedActiveSession) {
+    _sharedActiveSession = { ..._sharedActiveSession, transactions: [newTx, ...(_sharedActiveSession.transactions || [])] }
+  }
+  notify()
+  return newTx
+}
 
   function addPurchase(purchase) {
     const newP = {
