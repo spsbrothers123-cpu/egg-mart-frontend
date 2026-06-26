@@ -76,3 +76,44 @@ input[type="range"]::-webkit-slider-thumb {
   border: 2px solid var(--bg1);
   box-shadow: 0 0 4px rgba(0,0,0,0.3);
 }
+
+/* ── Responsive / Mobile ── */
+@media (max-width: 768px) {
+  body { overflow: auto; }
+
+  /* Hide desktop sidebar, show mobile elements */
+  .sidebar-desktop       { display: none !important; }
+  .hamburger-btn         { display: flex !important; }
+  .sidebar-drawer        { display: block !important; }
+  .sidebar-overlay       { display: block !important; }
+  .sidebar-close-btn     { display: flex !important; }
+
+  /* Stack top-bar nicely */
+  .topbar-shortcuts      { display: none !important; }
+
+  /* Main layout becomes full-width column */
+  .app-body              { flex-direction: column !important; }
+
+  /* Status bar text smaller */
+  .statusbar-sales       { display: none !important; }
+
+  /* Dashboard grid: 2 cols on tablet, 1 col on phone */
+  .stats-grid            { grid-template-columns: repeat(2, 1fr) !important; }
+  .charts-grid           { grid-template-columns: 1fr !important; }
+  .bottom-grid           { grid-template-columns: 1fr !important; }
+  .purchases-stats-grid  { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Tables: horizontal scroll */
+  .table-scroll-wrapper  { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Modals: full width */
+  .modal-inner           { width: calc(100vw - 32px) !important; max-width: 100% !important; }
+
+  /* Pages: reduce padding */
+  .page-content          { padding: 12px !important; }
+}
+
+@media (max-width: 480px) {
+  .stats-grid            { grid-template-columns: 1fr 1fr !important; }
+  .purchases-stats-grid  { grid-template-columns: 1fr 1fr !important; }
+}

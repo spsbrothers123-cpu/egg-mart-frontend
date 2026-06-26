@@ -77,11 +77,12 @@ export function Modal({ show, onClose, title, children, width = 400 }) {
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+      padding: '16px',
     }}>
-      <div style={{
-        width, background: 'var(--bg1)', borderRadius: 16,
+      <div className="modal-inner" style={{
+        width, maxWidth: '100%', background: 'var(--bg1)', borderRadius: 16,
         border: '1px solid var(--border)', padding: '1.5rem',
-        maxHeight: '80vh', overflowY: 'auto',
+        maxHeight: '90vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>

@@ -402,22 +402,33 @@ export default function App() {
     <AppContext.Provider value={ctxValue}>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top bar */}
-        <div style={{ height: 42, background: 'var(--bg1)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            <i className="ti ti-calendar" style={{ marginRight: 4 }}></i>{dateStr}
+        <div style={{ height: 48, background: 'var(--bg1)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', flexShrink: 0, gap: 8 }}>
+          {/* Hamburger lives here — only visible on mobile via CSS */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Sidebar
+              role={role} active={active} setActive={setActive}
+              onLogout={() => { setRole(null); setToken(null); _sharedActiveSession = null; notify() }}
+              session={shared.activeSession}
+              onEndSession={endSession}
+              hamburgerOnly
+            />
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              <i className="ti ti-calendar" style={{ marginRight: 4 }}></i>{dateStr}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--muted)' }}>
+          <div className="topbar-shortcuts" style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--muted)' }}>
             {role === 'cashier' && [['F1', 'Help'], ['F2', 'Hold'], ['F3', 'Pay']].map(([k, l]) => (
               <span key={k}><kbd style={{ fontFamily: 'inherit' }}>{k}</kbd> {l}</span>
             ))}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--green)' }}>
-            <i className="ti ti-wifi" style={{ marginRight: 4 }}></i>Online · Synced
+          <div style={{ fontSize: 12, color: 'var(--green)', whiteSpace: 'nowrap' }}>
+            <i className="ti ti-wifi" style={{ marginRight: 4 }}></i>
+            <span className="topbar-synced-text">Online · Synced</span>
           </div>
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div className="app-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <Sidebar
             role={role} active={active} setActive={setActive}
             onLogout={() => { setRole(null); setToken(null); _sharedActiveSession = null; notify() }}
@@ -438,7 +449,7 @@ export default function App() {
               </span>
             ) : role === 'cashier' ? <span style={{ color: 'var(--amber)' }}>No active session</span> : <span>Admin Mode</span>}
           </div>
-          <div style={{ display: 'flex', gap: 20, fontSize: 11, color: 'var(--muted)' }}>
+          <div className="statusbar-sales" style={{ display: 'flex', gap: 20, fontSize: 11, color: 'var(--muted)' }}>
             <span><span style={{ color: 'var(--text2)', marginRight: 4 }}>Today</span>{todayTx.length} bills</span>
             <span><span style={{ color: 'var(--text2)', marginRight: 4 }}>Sales</span>₹{totalSales.toLocaleString()}</span>
             <span><span style={{ color: 'var(--text2)', marginRight: 4 }}>Tax</span>{tax}%</span>

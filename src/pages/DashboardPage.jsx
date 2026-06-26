@@ -1,11 +1,35 @@
+import { useState, useEffect } from 'react'
 import { useApp } from '../App'
 
 export default function DashboardPage() {
-  const { transactions, products } = useApp()
+  const { transactions: localTx, products, token } = useApp()
+  const [transactions, setTransactions] = useState(localTx)
 
-  const now      = new Date()
-  const today    = now.toDateString()
-  const dateStr  = now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  // ── Fix #1: Fetch latest sales from backend (same as Reports/History) ──────
+  useEffect(() => {
+    if (!token) { setTransactions(localTx); return }
+    fetch(`${import.meta.env.VITE_API_URL}/api/bills`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setTransactions(data.map(b => ({
+          ...b,
+          date:     b.created_at,
+          total:    parseFloat(b.total),
+          method:   b.payment_method,
+          customer: b.customer_name || 'Walk-in Customer',
+          items:    b.item_count ?? (b.items?.length ?? 0),
+          cart:     b.items ?? [],
+        })))
+        else setTransactions(localTx)
+      })
+      .catch(() => setTransactions(localTx))
+  }, [token])
+
+  const now     = new Date()
+  const today   = now.toDateString()
+  const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
 
   /* ── Today's stats ── */
   const todayTx    = transactions.filter(t => new Date(t.date).toDateString() === today)
@@ -27,7 +51,7 @@ export default function DashboardPage() {
   })
   const maxMonth = Math.max(...monthly.map(m => m.total), 1)
 
-  /* ── Top selling products (by qty sold in all transactions) ── */
+  /* ── Top selling products ── */
   const productSales = {}
   transactions.forEach(tx => {
     if (!tx.cart) return
@@ -51,18 +75,18 @@ export default function DashboardPage() {
     { label: "Today's Sales", value: `₹${totalSales.toLocaleString()}`, icon: 'trending-up',  color: 'var(--green)'  },
     { label: 'Total Bills',   value: todayTx.length,                    icon: 'receipt',      color: 'var(--blue)'   },
     { label: 'Items Sold',    value: totalItems,                        icon: 'eggs',         color: 'var(--amber)'  },
-    { label: 'Avg. Bill',     value: avgBill > 0 ? `₹${avgBill}` : '—', icon: 'chart-bar',   color: 'var(--purple)' },
+    { label: 'Avg. Bill',     value: avgBill > 0 ? `₹${avgBill}` : '—', icon: 'chart-bar',  color: 'var(--purple)' },
   ]
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div className="page-content" style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 600 }}>Dashboard</div>
         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{dateStr} · Good morning, Admin</div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {STATS.map(s => (
           <div key={s.label} style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -75,8 +99,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-
+      <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {/* Monthly trend */}
         <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Monthly Sales Trend</div>
@@ -120,7 +143,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Low stock + Recent transactions */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="bottom-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--amber)' }}>
             <i className="ti ti-alert-triangle" style={{ marginRight: 6 }}></i>Low Stock Alerts

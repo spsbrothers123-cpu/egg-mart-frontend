@@ -69,10 +69,10 @@ export function ReportsPage() {
   const maxBar = Math.max(...last7.map(d => d.amount), 1)
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div className="page-content" style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
       <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Reports</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {summaryCards.map(r => (
           <div key={r.label} style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
