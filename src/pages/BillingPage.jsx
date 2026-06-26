@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { CATEGORIES } from '../data'
 import { Modal, ModalActions } from '../components/UI'
 import { useApp } from '../App'
@@ -62,6 +62,15 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
   /* Which field is active */
   const [activeField, setActiveField] = useState('qty')
 
+  /* Autofocus the quantity field as soon as the popup opens, so the numpad
+     starts driving qty immediately (mobile UX requirement). Pure focus
+     management — does not touch qty/price calculation logic. */
+  const qtyBoxRef = useRef(null)
+  useEffect(() => {
+    setActiveField('qty')
+    qtyBoxRef.current && qtyBoxRef.current.focus()
+  }, [])
+
   const priceTier = isWhiteEgg && !priceOverride
     ? (numQty >= 100 ? '≥100 pcs rate' : numQty >= 30 ? '30–99 pcs rate' : '<30 pcs rate')
     : null
@@ -75,7 +84,7 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
       <div style={{
         background: 'var(--bg1)', borderRadius: 16,
         border: '1px solid var(--border)',
-        width: 340, overflow: 'hidden',
+        width: '90vw', maxWidth: 360, overflow: 'hidden',
         boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
       }}>
 
@@ -99,10 +108,14 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
             <div>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Quantity</div>
               <div
+                ref={qtyBoxRef}
+                tabIndex={0}
                 onClick={() => setActiveField('qty')}
+                onFocus={() => setActiveField('qty')}
                 style={{
-                  padding: '10px 12px', borderRadius: 8, fontSize: 20, fontWeight: 700,
-                  textAlign: 'center', cursor: 'pointer',
+                  padding: '14px 12px', borderRadius: 8, fontSize: 22, fontWeight: 700,
+                  textAlign: 'center', cursor: 'pointer', outline: 'none',
+                  minHeight: 48,
                   border: `2px solid ${activeField === 'qty' ? 'var(--green)' : 'var(--border)'}`,
                   background: activeField === 'qty' ? 'var(--green-dim)' : 'var(--bg2)',
                   color: activeField === 'qty' ? 'var(--green)' : 'var(--text)',
@@ -118,8 +131,9 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
               <div
                 onClick={() => setActiveField('price')}
                 style={{
-                  padding: '10px 12px', borderRadius: 8, fontSize: 20, fontWeight: 700,
+                  padding: '14px 12px', borderRadius: 8, fontSize: 22, fontWeight: 700,
                   textAlign: 'center', cursor: 'pointer',
+                  minHeight: 48,
                   border: `2px solid ${activeField === 'price' ? 'var(--green)' : 'var(--border)'}`,
                   background: activeField === 'price' ? 'var(--green-dim)' : 'var(--bg2)',
                   color: activeField === 'price' ? 'var(--green)' : 'var(--text)',
@@ -141,7 +155,8 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 }}>
             {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k => (
               <button key={k} onClick={() => numpadPress(activeField, k)} style={{
-                padding: '12px 0', borderRadius: 8, fontSize: 18, fontWeight: 600,
+                padding: '16px 0', borderRadius: 8, fontSize: 19, fontWeight: 600,
+                minHeight: 48,
                 border: '1px solid var(--border)',
                 background: k === '⌫' ? 'var(--bg3)' : 'var(--bg2)',
                 color: k === '⌫' ? 'var(--red)' : 'var(--text)',
@@ -149,7 +164,8 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
               }}>{k}</button>
             ))}
             <button onClick={() => numpadPress(activeField, 'C')} style={{
-              gridColumn: '1 / -1', padding: '8px 0', borderRadius: 8, fontSize: 13,
+              gridColumn: '1 / -1', padding: '10px 0', borderRadius: 8, fontSize: 13,
+              minHeight: 44,
               border: '1px solid var(--border)', background: 'var(--bg2)',
               color: 'var(--amber)', cursor: 'pointer', fontWeight: 500,
             }}>Clear</button>
@@ -159,7 +175,8 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
         {/* Actions */}
         <div style={{ padding: '0 16px 16px', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
           <button onClick={onClose} style={{
-            padding: '12px', borderRadius: 10, fontSize: 13,
+            padding: '14px', borderRadius: 10, fontSize: 14,
+            minHeight: 48,
             border: '1px solid var(--border)', background: 'var(--bg2)',
             color: 'var(--text2)', cursor: 'pointer',
           }}>Cancel</button>
@@ -167,7 +184,8 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
             onClick={() => numQty > 0 && numPrice > 0 && onSave(numQty, numPrice)}
             disabled={numQty <= 0 || numPrice <= 0}
             style={{
-              padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+              padding: '14px', borderRadius: 10, fontSize: 15, fontWeight: 600,
+              minHeight: 48,
               border: 'none',
               background: numQty > 0 && numPrice > 0 ? 'var(--green)' : 'var(--bg3)',
               color: numQty > 0 && numPrice > 0 ? '#0a1a0a' : 'var(--muted)',
@@ -175,7 +193,7 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
             }}
           >
             <i className="ti ti-shopping-cart-plus" style={{ marginRight: 6 }}></i>
-            Save to Cart
+            Add to Cart
           </button>
         </div>
       </div>
@@ -198,6 +216,18 @@ export default function BillingPage() {
   const [paidSuccess, setPaidSuccess] = useState(false)
   const [heldBills,   setHeldBills]   = useState([])
   const [showHeld,    setShowHeld]    = useState(false)
+
+  /* ── Mobile/UX state (presentation only — no billing/cart math here) ── */
+  const [cartCollapsed, setCartCollapsed] = useState(false) // cart auto-minimizes after each add
+  const [justAdded,     setJustAdded]     = useState(null)  // brief "Product added" confirmation
+  const [isMobile,      setIsMobile]      = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  )
+  useEffect(() => {
+    function onResize() { setIsMobile(window.innerWidth <= 768) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   /* Product entry popup state */
   const [popupProduct, setPopupProduct] = useState(null)
@@ -227,6 +257,12 @@ export default function BillingPage() {
       return [...prev, { ...product, qty, editPrice: price }]
     })
     setPopupProduct(null)
+
+    /* Mobile/efficient-flow UX: confirm the add, then auto-minimize the
+       cart so the product list stays front-and-center for the next pick. */
+    setJustAdded(product.name)
+    setTimeout(() => setJustAdded(null), 1800)
+    if (isMobile) setCartCollapsed(true)
   }
 
   function removeItem(id) {
@@ -278,35 +314,48 @@ export default function BillingPage() {
   const isList = productView === 'list'
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden', position: 'relative' }}>
+      <style>{`
+        @keyframes ayiniToastIn {
+          from { opacity: 0; transform: translateY(-8px) ${isMobile ? 'translateX(-50%)' : ''}; }
+          to   { opacity: 1; transform: translateY(0) ${isMobile ? 'translateX(-50%)' : ''}; }
+        }
+        .ayini-added-toast { animation: ayiniToastIn 0.22s ease-out; }
+        .ayini-cart-panel { will-change: max-height, width; }
+      `}</style>
 
       {/* ── Product Panel ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
         {/* Search + Customer Name */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{
+          padding: '12px 16px', borderBottom: '1px solid var(--border)',
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: 10, alignItems: isMobile ? 'stretch' : 'center', flexShrink: 0,
+        }}>
           <div style={{ flex: 1, position: 'relative' }}>
-            <i className="ti ti-search" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 16 }}></i>
+            <i className="ti ti-search" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 16 }}></i>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products or scan barcode..."
-              style={{ width: '100%', padding: '8px 12px 8px 34px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none' }} />
+              style={{ width: '100%', padding: isMobile ? '12px 12px 12px 36px' : '8px 12px 8px 34px', minHeight: isMobile ? 44 : 'auto', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: isMobile ? 14 : 13, outline: 'none' }} />
           </div>
           <div style={{ position: 'relative' }}>
-            <i className="ti ti-user" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 14 }}></i>
+            <i className="ti ti-user" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 14 }}></i>
             <input value={customerName} onChange={e => setCustomerName(e.target.value)}
               placeholder="Customer name (optional)"
-              style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', width: 200 }} />
+              style={{ padding: isMobile ? '12px 12px 12px 34px' : '8px 12px 8px 32px', minHeight: isMobile ? 44 : 'auto', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: isMobile ? 14 : 13, outline: 'none', width: isMobile ? '100%' : 200 }} />
           </div>
         </div>
 
-        {/* Category Tabs */}
-        <div style={{ padding: '10px 16px', display: 'flex', gap: 6, flexShrink: 0, overflowX: 'auto' }}>
+        {/* Category Tabs (kept sticky/visible for quick access while picking products) */}
+        <div style={{ padding: '10px 16px', display: 'flex', gap: 6, flexShrink: 0, overflowX: 'auto', position: 'sticky', top: 0, background: 'var(--bg1)', zIndex: 5 }}>
           {CATEGORIES.map(c => (
             <button key={c.id} onClick={() => setCategory(c.id)} style={{
-              padding: '6px 14px', borderRadius: 20,
+              padding: isMobile ? '10px 16px' : '6px 14px', borderRadius: 20,
+              minHeight: isMobile ? 40 : 'auto',
               border: `1px solid ${category === c.id ? 'var(--green)' : 'var(--border)'}`,
               background: category === c.id ? 'var(--green-dim)' : 'var(--bg2)',
               color: category === c.id ? 'var(--green)' : 'var(--text2)',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+              fontSize: isMobile ? 13 : 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
             }}>{c.label}</button>
           ))}
         </div>
@@ -322,7 +371,8 @@ export default function BillingPage() {
                     background: inCart ? 'var(--green-dim)' : 'var(--bg2)',
                     borderRadius: 10,
                     border: `1px solid ${inCart ? 'var(--green)' : 'var(--border)'}`,
-                    padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14,
+                    padding: isMobile ? '14px 14px' : '10px 14px', minHeight: isMobile ? 56 : 'auto',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14,
                   }}>
                     <div style={{ fontSize: 28, width: 36, textAlign: 'center' }}>{p.emoji}</div>
                     <div style={{ flex: 1 }}>
@@ -334,8 +384,8 @@ export default function BillingPage() {
                       <div style={{ fontSize: 11, color: p.stock > 50 ? 'var(--green-text)' : 'var(--amber)' }}>Stock: {p.stock}</div>
                     </div>
                     {inCart
-                      ? <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a1a0a', fontSize: 12, fontWeight: 700 }}>{inCart.qty}</div>
-                      : <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a1a0a', fontSize: 18, fontWeight: 700 }}>+</div>
+                      ? <div style={{ width: isMobile ? 34 : 28, height: isMobile ? 34 : 28, borderRadius: 6, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a1a0a', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{inCart.qty}</div>
+                      : <div style={{ width: isMobile ? 34 : 28, height: isMobile ? 34 : 28, borderRadius: 6, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a1a0a', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>+</div>
                     }
                   </div>
                 )
@@ -343,8 +393,9 @@ export default function BillingPage() {
             </div>
           ) : (
             <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(148px,1fr))',
-              gap: 10, alignContent: 'start', marginTop: 4,
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(auto-fill,minmax(140px,1fr))' : 'repeat(auto-fill,minmax(148px,1fr))',
+              gap: isMobile ? 8 : 10, alignContent: 'start', marginTop: 4,
             }}>
               {filtered.map(p => {
                 const inCart = cart.find(i => i.id === p.id)
@@ -353,7 +404,8 @@ export default function BillingPage() {
                     background: inCart ? 'var(--green-dim)' : 'var(--bg2)',
                     borderRadius: 12,
                     border: `1px solid ${inCart ? 'var(--green)' : 'var(--border)'}`,
-                    padding: '12px', cursor: 'pointer', position: 'relative',
+                    padding: isMobile ? '14px' : '12px', cursor: 'pointer', position: 'relative',
+                    minHeight: isMobile ? 64 : 'auto',
                   }}>
                     {inCart && (
                       <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--green)', color: '#0a1a0a', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>×{inCart.qty}</div>
@@ -382,9 +434,10 @@ export default function BillingPage() {
             { label: `Held (${heldBills.length})`, icon: 'clock', color: 'var(--blue)',   action: () => setShowHeld(true) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} style={{
-              flex: 1, padding: '8px', borderRadius: 8,
+              flex: 1, padding: isMobile ? '12px' : '8px', borderRadius: 8,
+              minHeight: isMobile ? 44 : 'auto',
               border: '1px solid var(--border)', background: 'var(--bg2)',
-              color: btn.color, fontSize: 12, cursor: 'pointer',
+              color: btn.color, fontSize: isMobile ? 13 : 12, cursor: 'pointer',
             }}>
               <i className={`ti ti-${btn.icon}`} style={{ marginRight: 4 }}></i>{btn.label}
             </button>
@@ -393,12 +446,47 @@ export default function BillingPage() {
       </div>
 
       {/* ── Cart Panel ── */}
-      <div style={{ width: 310, background: 'var(--bg1)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Current Bill</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            <i className="ti ti-user" style={{ marginRight: 4 }}></i>
-            {effectiveName}
+      <div
+        className="ayini-cart-panel"
+        style={{
+          width: isMobile && cartCollapsed ? '100%' : (isMobile ? '100%' : 310),
+          maxHeight: isMobile && cartCollapsed ? 56 : (isMobile ? '60vh' : 'none'),
+          background: 'var(--bg1)',
+          borderLeft: isMobile ? 'none' : '1px solid var(--border)',
+          borderTop: isMobile ? '1px solid var(--border)' : 'none',
+          display: 'flex', flexDirection: 'column', flexShrink: 0,
+          transition: 'max-height 0.28s ease, width 0.28s ease',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          onClick={() => isMobile && setCartCollapsed(c => !c)}
+          style={{
+            padding: '12px 16px', borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexShrink: 0, cursor: isMobile ? 'pointer' : 'default',
+            minHeight: 48,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Current Bill</div>
+            {isMobile && cart.length > 0 && (
+              <span style={{ background: 'var(--green)', color: '#0a1a0a', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '2px 7px' }}>
+                {cart.length}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isMobile && cartCollapsed && (
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>₹{total.toFixed(2)}</span>
+            )}
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              <i className="ti ti-user" style={{ marginRight: 4 }}></i>
+              {effectiveName}
+            </div>
+            {isMobile && (
+              <i className={`ti ti-chevron-${cartCollapsed ? 'up' : 'down'}`} style={{ fontSize: 16, color: 'var(--muted)' }}></i>
+            )}
           </div>
         </div>
 
@@ -406,22 +494,22 @@ export default function BillingPage() {
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, marginTop: '2rem' }}>
               <i className="ti ti-shopping-cart" style={{ fontSize: 32, display: 'block', marginBottom: 8 }}></i>
-              Cart is empty<br /><span style={{ fontSize: 11 }}>Click products to add</span>
+              Cart is empty<br /><span style={{ fontSize: 11 }}>Tap a product to add</span>
             </div>
           ) : cart.map(item => (
-            <div key={item.id} onClick={() => openProductPopup(item)} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+            <div key={item.id} onClick={() => openProductPopup(item)} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ fontSize: 20 }}>{item.emoji}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{item.name} ({item.pack})</div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name} ({item.pack})</div>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                     ₹{item.editPrice.toFixed(2)} × {item.qty}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>₹{(item.editPrice * item.qty).toFixed(2)}</span>
-                  <button onClick={e => { e.stopPropagation(); removeItem(item.id) }} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0 }}>
-                    <i className="ti ti-trash" style={{ fontSize: 14 }}></i>
+                  <button onClick={e => { e.stopPropagation(); removeItem(item.id) }} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 8, minWidth: 32, minHeight: 32 }}>
+                    <i className="ti ti-trash" style={{ fontSize: 15 }}></i>
                   </button>
                 </div>
               </div>
@@ -461,10 +549,11 @@ export default function BillingPage() {
             </button>
           </div>
           <button onClick={() => cart.length > 0 && setPayModal(true)} style={{
-            width: '100%', padding: '12px', borderRadius: 10,
+            width: '100%', padding: isMobile ? '15px' : '12px', borderRadius: 10,
+            minHeight: isMobile ? 50 : 'auto',
             background: cart.length > 0 ? 'var(--green)' : 'var(--bg3)',
             color: cart.length > 0 ? '#0a1a0a' : 'var(--muted)',
-            fontSize: 15, fontWeight: 600, border: 'none',
+            fontSize: isMobile ? 16 : 15, fontWeight: 600, border: 'none',
             cursor: cart.length > 0 ? 'pointer' : 'default',
           }}>
             Checkout ₹{total.toFixed(2)} <i className="ti ti-arrow-right"></i>
@@ -486,6 +575,25 @@ export default function BillingPage() {
       {paidSuccess && (
         <div style={{ position: 'absolute', top: 20, right: 20, background: 'var(--green)', color: '#0a1a0a', padding: '12px 20px', borderRadius: 10, fontWeight: 600, fontSize: 14, zIndex: 100 }}>
           <i className="ti ti-check" style={{ marginRight: 6 }}></i>Payment Successful!
+        </div>
+      )}
+
+      {/* "Product added" Toast — confirms each add without blocking the next selection */}
+      {justAdded && (
+        <div
+          className="ayini-added-toast"
+          style={{
+            position: 'absolute',
+            top: isMobile ? 12 : 20,
+            left: isMobile ? '50%' : 'auto',
+            right: isMobile ? 'auto' : 20,
+            transform: isMobile ? 'translateX(-50%)' : 'none',
+            background: 'var(--green)', color: '#0a1a0a',
+            padding: '10px 18px', borderRadius: 10, fontWeight: 600, fontSize: 13,
+            zIndex: 100, whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+          }}
+        >
+          <i className="ti ti-check" style={{ marginRight: 6 }}></i>{justAdded} added successfully
         </div>
       )}
 
