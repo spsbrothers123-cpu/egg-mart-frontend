@@ -28,9 +28,12 @@ export default function SessionStartPage({ onStart }) {
 
   async function handleStart() {
     setLoading(true)
-    // Build drawer_counts payload for the backend
+    // Build drawer_counts payload for the backend — plain numeric keys
+    // (500, 200, 100, 50, ...) so it matches the shape SessionPage's
+    // DrawerBreakdown reads (counts[d.value]) and the shape SessionEndPage
+    // already sends for the closing count.
     const drawerCounts = Object.fromEntries(
-      DENOMINATIONS.map(d => [`denom_${d.value}`, counts[d.value]])
+      DENOMINATIONS.map(d => [d.value, counts[d.value]])
     )
     await onStart(openingCash, drawerCounts)
     setLoading(false)

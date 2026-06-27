@@ -1,80 +1,47 @@
-// src/pages/PurchasePage.jsx
-// Mobile-optimised Purchase module for Egg Mart POS
-// Drop-in replacement: add <Route path="/purchase" element={<PurchasePage />} /> in App.jsx
+// src/pages/PurchasesPage.jsx
+// Admin Purchase module for Egg Mart POS — product selection sources the
+// real inventory (useApp().products) and "Submit Purchase" actually
+// persists to the backend via addPurchase(), with a Purchase History
+// section showing everything that's been saved.
 
-import { useState, useRef, useEffect, useCallback } from "react";
-
-// ─── Product Data (inline so the file is self-contained) ──────────────────────
-const PRODUCTS = [
-  // EGGS
-  { id: 1,  name: "Farm Fresh Eggs (Tray 30)",     category: "Eggs",         unit: "Tray",   price: 180 },
-  { id: 2,  name: "Farm Fresh Eggs (Pack 6)",      category: "Eggs",         unit: "Pack",   price: 38  },
-  { id: 3,  name: "Farm Fresh Eggs (Pack 12)",     category: "Eggs",         unit: "Pack",   price: 72  },
-  { id: 4,  name: "Country / Desi Eggs (Tray 30)", category: "Eggs",         unit: "Tray",   price: 270 },
-  { id: 5,  name: "Country / Desi Eggs (Pack 6)",  category: "Eggs",         unit: "Pack",   price: 55  },
-  { id: 6,  name: "Organic Free-Range Eggs (Doz)", category: "Eggs",         unit: "Dozen",  price: 120 },
-  { id: 7,  name: "Brown Eggs (Tray 30)",           category: "Eggs",         unit: "Tray",   price: 210 },
-  { id: 8,  name: "Brown Eggs (Pack 6)",            category: "Eggs",         unit: "Pack",   price: 44  },
-  { id: 9,  name: "Omega-3 Enriched Eggs (Pack 6)",category: "Eggs",         unit: "Pack",   price: 65  },
-  { id: 10, name: "Quail Eggs (Pack 20)",           category: "Eggs",         unit: "Pack",   price: 90  },
-  { id: 11, name: "Duck Eggs (Pack 6)",             category: "Eggs",         unit: "Pack",   price: 80  },
-  { id: 12, name: "Jumbo Eggs (Tray 30)",           category: "Eggs",         unit: "Tray",   price: 220 },
-  { id: 13, name: "Medium Eggs (Tray 30)",          category: "Eggs",         unit: "Tray",   price: 165 },
-  // EGG PRODUCTS
-  { id: 14, name: "Boiled Eggs (Pack 6)",           category: "Egg Products", unit: "Pack",   price: 50  },
-  { id: 15, name: "Pickled Eggs (Jar 12)",          category: "Egg Products", unit: "Jar",    price: 130 },
-  { id: 16, name: "Liquid Whole Egg (1 Litre)",    category: "Egg Products", unit: "Litre",  price: 95  },
-  { id: 17, name: "Egg White Liquid (500 ml)",     category: "Egg Products", unit: "Bottle", price: 80  },
-  { id: 18, name: "Egg Yolk Liquid (500 ml)",      category: "Egg Products", unit: "Bottle", price: 75  },
-  { id: 19, name: "Egg Powder (200 g)",             category: "Egg Products", unit: "Pack",   price: 160 },
-  { id: 20, name: "Pasteurised Eggs (Dozen)",       category: "Egg Products", unit: "Dozen",  price: 130 },
-  // DAIRY
-  { id: 21, name: "Full Cream Milk (1 Litre)",     category: "Dairy",        unit: "Litre",  price: 68  },
-  { id: 22, name: "Toned Milk (500 ml)",            category: "Dairy",        unit: "Pouch",  price: 30  },
-  { id: 23, name: "Butter (500 g)",                 category: "Dairy",        unit: "Pack",   price: 240 },
-  { id: 24, name: "Paneer (200 g)",                 category: "Dairy",        unit: "Pack",   price: 90  },
-  { id: 25, name: "Curd / Yoghurt (400 g)",         category: "Dairy",        unit: "Cup",    price: 45  },
-  { id: 26, name: "Cheese Slices (200 g)",          category: "Dairy",        unit: "Pack",   price: 120 },
-  // FEED
-  { id: 27, name: "Poultry Layer Feed (25 kg)",    category: "Feed",         unit: "Bag",    price: 950 },
-  { id: 28, name: "Poultry Starter Feed (25 kg)",  category: "Feed",         unit: "Bag",    price: 900 },
-  { id: 29, name: "Calcium Supplement (1 kg)",     category: "Feed",         unit: "Pack",   price: 110 },
-  { id: 30, name: "Vitamin Premix (500 g)",         category: "Feed",         unit: "Pack",   price: 180 },
-  // PACKAGING
-  { id: 31, name: "Egg Carton (Pack of 50)",       category: "Packaging",    unit: "Pack",   price: 200 },
-  { id: 32, name: "Egg Tray (Pack of 20)",         category: "Packaging",    unit: "Pack",   price: 150 },
-  { id: 33, name: "Bubble Wrap Roll (50 m)",       category: "Packaging",    unit: "Roll",   price: 280 },
-];
-
-const CATEGORIES = ["All", "Eggs", "Egg Products", "Dairy", "Feed", "Packaging"];
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useApp } from "../App";
+import { getPurchases } from "../api";
 
 const fmt = (n) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n) || 0);
+
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Toast({ message, onDone }) {
+function Toast({ message, type = "success", onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div style={styles.toast}>
-      <span style={styles.toastIcon}>✓</span>
+    <div style={{ ...styles.toast, background: type === "error" ? "var(--red)" : "var(--green)" }}>
+      <span style={styles.toastIcon}>{type === "error" ? "✕" : "✓"}</span>
       {message}
     </div>
   );
 }
 
-function ProductDropdown({ value, onChange, search, onSearchChange, open, onToggle, dropdownRef }) {
-  const filtered = PRODUCTS.filter((p) =>
+function ProductDropdown({ value, onChange, search, onSearchChange, open, onToggle, dropdownRef, products }) {
+  const categories = useMemo(() => {
+    const set = new Set(products.map((p) => p.category || "Other"));
+    return ["All", ...Array.from(set)];
+  }, [products]);
+
+  const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
+    (p.category || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group by category
-  const grouped = CATEGORIES.slice(1).reduce((acc, cat) => {
-    const items = filtered.filter((p) => p.category === cat);
+  const grouped = categories.slice(1).reduce((acc, cat) => {
+    const items = filtered.filter((p) => (p.category || "Other") === cat);
     if (items.length) acc[cat] = items;
     return acc;
   }, {});
@@ -82,11 +49,11 @@ function ProductDropdown({ value, onChange, search, onSearchChange, open, onTogg
   return (
     <div style={styles.dropdownWrapper} ref={dropdownRef}>
       <div style={styles.dropdownTrigger} onClick={onToggle}>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {value ? (
             <>
-              <div style={styles.selectedName}>{value.name}</div>
-              <div style={styles.selectedMeta}>{value.category} · {value.unit} · {fmt(value.price)}</div>
+              <div style={styles.selectedName}>{value.emoji ? `${value.emoji} ` : ""}{value.name}</div>
+              <div style={styles.selectedMeta}>{value.pack || value.category} · {fmt(value.price)} · Stock: {value.stock ?? "—"}</div>
             </>
           ) : (
             <span style={styles.placeholder}>🔍  Select a product…</span>
@@ -131,8 +98,8 @@ function ProductDropdown({ value, onChange, search, onSearchChange, open, onTogg
                         onSearchChange("");
                       }}
                     >
-                      <div style={styles.itemName}>{p.name}</div>
-                      <div style={styles.itemPrice}>{fmt(p.price)} / {p.unit}</div>
+                      <div style={styles.itemName}>{p.emoji ? `${p.emoji} ` : ""}{p.name}</div>
+                      <div style={styles.itemPrice}>{fmt(p.price)} / {p.pack || "unit"}</div>
                     </div>
                   ))}
                 </div>
@@ -149,23 +116,68 @@ function CartItem({ item, onQtyChange, onRemove }) {
   return (
     <div style={styles.cartItem}>
       <div style={styles.cartItemInfo}>
-        <div style={styles.cartItemName}>{item.product.name}</div>
-        <div style={styles.cartItemMeta}>{fmt(item.product.price)} × {item.qty} {item.product.unit}</div>
+        <div style={styles.cartItemName}>{item.product.emoji ? `${item.product.emoji} ` : ""}{item.product.name}</div>
+        <div style={styles.cartItemMeta}>{fmt(item.unitPrice)} × {item.qty} {item.product.pack || ""}</div>
       </div>
       <div style={styles.cartItemActions}>
         <button style={styles.qtyBtn} onClick={() => onQtyChange(item.product.id, Math.max(1, item.qty - 1))}>−</button>
         <span style={styles.qtyDisplay}>{item.qty}</span>
         <button style={styles.qtyBtn} onClick={() => onQtyChange(item.product.id, item.qty + 1)}>+</button>
-        <span style={styles.cartItemTotal}>{fmt(item.product.price * item.qty)}</span>
+        <span style={styles.cartItemTotal}>{fmt(item.unitPrice * item.qty)}</span>
         <button style={styles.removeBtn} onClick={() => onRemove(item.product.id)}>🗑</button>
       </div>
     </div>
   );
 }
 
+function HistoryRow({ purchase, expanded, onToggle }) {
+  return (
+    <div style={styles.historyRow}>
+      <div style={styles.historyRowMain} onClick={onToggle}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={styles.historyInvoice}>
+            {purchase.invoice_no || `Purchase #${purchase.id}`}
+            {purchase.status && (
+              <span style={{
+                ...styles.statusBadge,
+                background: purchase.status === 'cancelled' ? 'rgba(220,38,38,0.15)' : 'var(--green-dim)',
+                color: purchase.status === 'cancelled' ? 'var(--red)' : 'var(--green)',
+              }}>{purchase.status}</span>
+            )}
+          </div>
+          <div style={styles.historyMeta}>
+            {purchase.supplier || "Unknown supplier"} · {fmtDate(purchase.purchase_date || purchase.created_at)}
+            {purchase.created_by_name ? ` · by ${purchase.created_by_name}` : ""}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={styles.historyTotal}>{fmt(purchase.subtotal)}</div>
+          <div style={styles.historyItemCount}>{purchase.item_count ?? purchase.items?.length ?? 0} item(s)</div>
+        </div>
+        <span style={{ ...styles.chevron, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", marginLeft: 8 }}>▾</span>
+      </div>
+
+      {expanded && purchase.items && (
+        <div style={styles.historyItemsList}>
+          {purchase.items.map((it) => (
+            <div key={it.id} style={styles.historyItemRow}>
+              <span>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
+              <span style={{ color: "var(--muted)" }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
+              <span style={{ fontWeight: 600 }}>{fmt(it.total)}</span>
+            </div>
+          ))}
+          {purchase.notes && <div style={styles.historyNotes}>📝 {purchase.notes}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function PurchasePage() {
+export default function PurchasesPage() {
+  const { products, addPurchase } = useApp();
+
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
@@ -178,12 +190,32 @@ export default function PurchasePage() {
   const [invoiceNo, setInvoiceNo] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [showHistory, setShowHistory] = useState(true);
 
   const qtyRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  // Close dropdown on outside click
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const data = await getPurchases({ limit: 100 });
+      setHistory(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load purchase history:", err);
+      setHistoryError("Couldn't load purchase history. Check your connection and try again.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -195,7 +227,6 @@ export default function PurchasePage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Auto-focus qty input when product selected
   useEffect(() => {
     if (selectedProduct && qtyRef.current) {
       setTimeout(() => qtyRef.current?.focus(), 80);
@@ -204,7 +235,7 @@ export default function PurchasePage() {
 
   const handleProductSelect = useCallback((product) => {
     setSelectedProduct(product);
-    setUnitPrice(product.price.toString());
+    setUnitPrice(String(product.price));
     setQuantity("");
   }, []);
 
@@ -222,18 +253,17 @@ export default function PurchasePage() {
             : i
         );
       }
-      return [...prev, { product: { ...selectedProduct, price }, qty, unitPrice: price }];
+      return [...prev, { product: selectedProduct, qty, unitPrice: price }];
     });
 
-    setToast(`${selectedProduct.name} added!`);
-    setCartOpen(false); // collapse cart so user can add next product fast
+    setToast({ message: `${selectedProduct.name} added!`, type: "success" });
+    setCartOpen(false);
     setSelectedProduct(null);
     setQuantity("");
     setUnitPrice("");
-    setTimeout(() => setDropdownOpen(true), 150); // re-open dropdown for next item
+    setTimeout(() => setDropdownOpen(true), 150);
   }, [selectedProduct, quantity, unitPrice]);
 
-  // Submit on Enter in qty field
   const handleQtyKeyDown = (e) => {
     if (e.key === "Enter") handleAddToCart();
   };
@@ -246,29 +276,58 @@ export default function PurchasePage() {
     setCart((prev) => prev.filter((i) => i.product.id !== id));
   };
 
-  const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
 
   const handleSubmitPurchase = async () => {
-    if (!cart.length) return;
+    if (!cart.length || submitting) return;
     setSubmitting(true);
-    // Replace with real API call, e.g.:
-    // await fetch("/api/purchases", { method: "POST", body: JSON.stringify({ supplier, invoiceNo, purchaseDate, items: cart }) });
-    await new Promise((r) => setTimeout(r, 900)); // simulate API
+
+    const result = await addPurchase({
+      invoiceNo,
+      supplier,
+      purchaseDate,
+      items: cart.map((i) => ({
+        productId:  i.product.id,
+        name:       i.product.name,
+        pack:       i.product.pack,
+        unitPrice:  i.unitPrice,
+        qty:        i.qty,
+      })),
+    });
+
     setSubmitting(false);
-    setSubmitted(true);
-    setCart([]);
-    setSelectedProduct(null);
-    setQuantity("");
-    setUnitPrice("");
-    setSupplier("");
-    setInvoiceNo("");
-    setTimeout(() => setSubmitted(false), 3000);
+
+    if (result) {
+      setCart([]);
+      setSelectedProduct(null);
+      setQuantity("");
+      setUnitPrice("");
+      setSupplier("");
+      setInvoiceNo("");
+      loadHistory();
+    } else {
+      setToast({ message: "Couldn't save purchase — please try again.", type: "error" });
+    }
   };
+
+  const stats = useMemo(() => {
+    const total = history.reduce((s, p) => s + Number(p.subtotal || 0), 0);
+    const thisMonth = history.filter((p) => {
+      const d = new Date(p.purchase_date || p.created_at);
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    return {
+      count: history.length,
+      total,
+      monthCount: thisMonth.length,
+      monthTotal: thisMonth.reduce((s, p) => s + Number(p.subtotal || 0), 0),
+    };
+  }, [history]);
 
   return (
     <div style={styles.page}>
-      {/* ── Header ── */}
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>🛒 Purchase Entry</h1>
@@ -282,17 +341,8 @@ export default function PurchasePage() {
         )}
       </div>
 
-      {/* ── Toast notification ── */}
-      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
 
-      {/* ── Success banner ── */}
-      {submitted && (
-        <div style={styles.successBanner}>
-          ✅ Purchase submitted successfully!
-        </div>
-      )}
-
-      {/* ── Purchase Meta ── */}
       <div style={styles.card}>
         <div style={styles.metaGrid}>
           <div style={styles.field}>
@@ -325,7 +375,6 @@ export default function PurchasePage() {
         </div>
       </div>
 
-      {/* ── Product Selector ── */}
       <div style={styles.card}>
         <label style={styles.sectionLabel}>Step 1 — Select Product</label>
         <ProductDropdown
@@ -336,12 +385,13 @@ export default function PurchasePage() {
           open={dropdownOpen}
           onToggle={() => setDropdownOpen((o) => !o)}
           dropdownRef={dropdownRef}
+          products={products}
         />
 
         {selectedProduct && (
           <div style={styles.addRow}>
             <div style={styles.qtyGroup}>
-              <label style={styles.label}>Step 2 — Quantity ({selectedProduct.unit})</label>
+              <label style={styles.label}>Step 2 — Quantity {selectedProduct.pack ? `(${selectedProduct.pack})` : ""}</label>
               <input
                 ref={qtyRef}
                 style={styles.qtyInput}
@@ -386,7 +436,6 @@ export default function PurchasePage() {
         )}
       </div>
 
-      {/* ── Collapsible Cart ── */}
       {cart.length > 0 && (
         <div style={styles.cartCard}>
           <button style={styles.cartHeader} onClick={() => setCartOpen((o) => !o)}>
@@ -450,392 +499,226 @@ export default function PurchasePage() {
         </div>
       )}
 
-      {/* ── Empty state ── */}
       {cart.length === 0 && !selectedProduct && (
         <div style={styles.emptyState}>
           <div style={styles.emptyIcon}>🥚</div>
           <p style={styles.emptyText}>Select a product above to start building your purchase order.</p>
         </div>
       )}
+
+      <div style={styles.card}>
+        <button style={styles.historyHeaderBtn} onClick={() => setShowHistory((s) => !s)}>
+          <label style={{ ...styles.sectionLabel, margin: 0 }}>📜 Purchase History</label>
+          <span style={{ ...styles.chevron, transform: showHistory ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+        </button>
+
+        {showHistory && (
+          <>
+            <div className="purchases-stats-grid" style={styles.statsGrid}>
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>Total Purchases</div>
+                <div style={styles.statValue}>{stats.count}</div>
+              </div>
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>Total Spend</div>
+                <div style={styles.statValue}>{fmt(stats.total)}</div>
+              </div>
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>This Month</div>
+                <div style={styles.statValue}>{stats.monthCount}</div>
+              </div>
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>This Month Spend</div>
+                <div style={styles.statValue}>{fmt(stats.monthTotal)}</div>
+              </div>
+            </div>
+
+            {historyLoading ? (
+              <div style={styles.historyEmpty}>Loading purchase history…</div>
+            ) : historyError ? (
+              <div style={styles.historyErrorBox}>
+                ⚠️ {historyError}
+                <button style={styles.retryBtn} onClick={loadHistory}>Retry</button>
+              </div>
+            ) : history.length === 0 ? (
+              <div style={styles.historyEmpty}>No purchases recorded yet. Submit your first purchase above.</div>
+            ) : (
+              <div style={styles.historyList}>
+                {history.map((p) => (
+                  <HistoryRow
+                    key={p.id}
+                    purchase={p}
+                    expanded={expandedId === p.id}
+                    onToggle={async () => {
+                      if (expandedId === p.id) {
+                        setExpandedId(null);
+                        return;
+                      }
+                      setExpandedId(p.id);
+                      if (!p.items) {
+                        try {
+                          const full = await fetch(
+                            `${import.meta.env.VITE_API_URL}/api/purchases/${p.id}`,
+                            { headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` } }
+                          ).then((r) => (r.ok ? r.json() : null));
+                          if (full) {
+                            setHistory((prev) => prev.map((row) => (row.id === p.id ? { ...row, items: full.items } : row)));
+                          }
+                        } catch {
+                          // Row just won't show line-item detail this time
+                        }
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
-const COLOR = {
-  bg: "#f5f6fa",
-  card: "#ffffff",
-  primary: "#e67e22",
-  primaryDark: "#d35400",
-  primaryLight: "#fdf3eb",
-  success: "#27ae60",
-  danger: "#e74c3c",
-  text: "#2c3e50",
-  muted: "#7f8c8d",
-  border: "#e8ecef",
-  shadow: "0 2px 8px rgba(0,0,0,0.08)",
-};
+// Dark theme tokens (var(--*)) to match the rest of the admin app, instead of
+// the standalone light theme this page previously used in isolation.
 
 const styles = {
-  page: {
-    background: COLOR.bg,
-    minHeight: "100vh",
-    padding: "12px",
-    maxWidth: "540px",
-    margin: "0 auto",
-    fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "16px",
-  },
-  title: { margin: 0, fontSize: "22px", fontWeight: 700, color: COLOR.text },
-  subtitle: { margin: "2px 0 0", fontSize: "13px", color: COLOR.muted },
+  page: { padding: 16, paddingBottom: 40, maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 },
+
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  title: { fontSize: 20, fontWeight: 700, margin: 0, color: "var(--text)" },
+  subtitle: { fontSize: 13, color: "var(--muted)", margin: "2px 0 0" },
+
   cartToggleBtn: {
-    background: COLOR.primary,
-    color: "#fff",
-    border: "none",
-    borderRadius: "24px",
-    padding: "10px 18px",
-    fontSize: "15px",
-    fontWeight: 600,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    boxShadow: "0 2px 8px rgba(230,126,34,0.35)",
+    display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 10,
+    background: "var(--green)", color: "#0a1a0a", border: "none", fontWeight: 600, fontSize: 13,
+    cursor: "pointer", minHeight: 40,
   },
-  cartBadge: {
-    background: "#fff",
-    color: COLOR.primary,
-    borderRadius: "50%",
-    width: "22px",
-    height: "22px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "12px",
-    fontWeight: 700,
-  },
-  toast: {
-    position: "fixed",
-    top: "16px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    background: COLOR.success,
-    color: "#fff",
-    padding: "12px 24px",
-    borderRadius: "32px",
-    fontSize: "14px",
-    fontWeight: 600,
-    zIndex: 999,
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    boxShadow: "0 4px 20px rgba(39,174,96,0.4)",
-    animation: "fadeIn 0.2s ease",
-  },
-  toastIcon: { fontSize: "18px" },
-  successBanner: {
-    background: "#eafaf1",
-    border: `1px solid ${COLOR.success}`,
-    borderRadius: "10px",
-    padding: "12px 16px",
-    color: COLOR.success,
-    fontWeight: 600,
-    marginBottom: "12px",
-    fontSize: "14px",
-  },
-  card: {
-    background: COLOR.card,
-    borderRadius: "14px",
-    padding: "16px",
-    marginBottom: "12px",
-    boxShadow: COLOR.shadow,
-  },
-  cartCard: {
-    background: COLOR.card,
-    borderRadius: "14px",
-    marginBottom: "12px",
-    boxShadow: COLOR.shadow,
-    overflow: "hidden",
-  },
-  metaGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
-  },
-  field: { display: "flex", flexDirection: "column", gap: "4px" },
-  label: { fontSize: "12px", fontWeight: 600, color: COLOR.muted, textTransform: "uppercase", letterSpacing: "0.5px" },
-  sectionLabel: {
-    display: "block",
-    fontSize: "12px",
-    fontWeight: 700,
-    color: COLOR.muted,
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-    marginBottom: "10px",
-  },
+  cartBadge: { background: "rgba(0,0,0,0.25)", borderRadius: 10, padding: "1px 7px", fontSize: 12 },
+
+  card: { background: "var(--bg1)", border: "1px solid var(--border)", borderRadius: 14, padding: 16 },
+
+  metaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 },
+  field: { display: "flex", flexDirection: "column", gap: 4 },
+  label: { fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 },
   input: {
-    border: `1.5px solid ${COLOR.border}`,
-    borderRadius: "8px",
-    padding: "10px 12px",
-    fontSize: "14px",
-    color: COLOR.text,
-    background: "#fafafa",
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
+    padding: "12px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)",
+    color: "var(--text)", fontSize: 14, outline: "none", minHeight: 44,
   },
-  // Dropdown
+
+  sectionLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.4 },
+
   dropdownWrapper: { position: "relative" },
   dropdownTrigger: {
-    display: "flex",
-    alignItems: "center",
-    border: `1.5px solid ${COLOR.border}`,
-    borderRadius: "10px",
-    padding: "12px 14px",
-    cursor: "pointer",
-    background: "#fafafa",
-    minHeight: "56px",
-    gap: "8px",
-    userSelect: "none",
+    display: "flex", alignItems: "center", gap: 10, padding: "14px 14px", borderRadius: 10,
+    border: "1.5px solid var(--border)", background: "var(--bg2)", cursor: "pointer", minHeight: 56,
   },
-  selectedName: { fontSize: "15px", fontWeight: 600, color: COLOR.text },
-  selectedMeta: { fontSize: "12px", color: COLOR.muted, marginTop: "2px" },
-  placeholder: { color: COLOR.muted, fontSize: "15px" },
-  chevron: {
-    fontSize: "18px",
-    color: COLOR.muted,
-    transition: "transform 0.2s ease",
-    lineHeight: 1,
-    flexShrink: 0,
-  },
+  selectedName: { fontSize: 14, fontWeight: 600, color: "var(--text)" },
+  selectedMeta: { fontSize: 12, color: "var(--muted)", marginTop: 2 },
+  placeholder: { fontSize: 14, color: "var(--muted)" },
+  chevron: { fontSize: 14, color: "var(--muted)", transition: "transform 0.2s ease", flexShrink: 0 },
+
   dropdownPanel: {
-    position: "absolute",
-    top: "calc(100% + 6px)",
-    left: 0,
-    right: 0,
-    background: "#fff",
-    borderRadius: "12px",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-    zIndex: 200,
-    overflow: "hidden",
-    border: `1px solid ${COLOR.border}`,
+    position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 30,
+    background: "var(--bg1)", border: "1px solid var(--border)", borderRadius: 12,
+    boxShadow: "0 12px 32px rgba(0,0,0,0.4)", maxHeight: 360, display: "flex", flexDirection: "column", overflow: "hidden",
   },
-  searchBox: {
-    display: "flex",
-    alignItems: "center",
-    padding: "10px 12px",
-    borderBottom: `1px solid ${COLOR.border}`,
-    gap: "8px",
-  },
-  searchIcon: { fontSize: "16px", flexShrink: 0 },
-  searchInput: {
-    flex: 1,
-    border: "none",
-    outline: "none",
-    fontSize: "15px",
-    color: COLOR.text,
-    background: "transparent",
-  },
-  clearBtn: {
-    border: "none",
-    background: "none",
-    cursor: "pointer",
-    color: COLOR.muted,
-    fontSize: "14px",
-    padding: "2px 4px",
-  },
-  dropdownList: {
-    maxHeight: "340px",
-    overflowY: "auto",
-    WebkitOverflowScrolling: "touch",
-  },
-  categoryHeader: {
-    padding: "8px 14px 4px",
-    fontSize: "11px",
-    fontWeight: 700,
-    color: COLOR.primary,
-    textTransform: "uppercase",
-    letterSpacing: "0.7px",
-    background: COLOR.primaryLight,
-    borderTop: `1px solid ${COLOR.border}`,
-  },
-  dropdownItem: {
-    padding: "12px 14px",
-    cursor: "pointer",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottom: `1px solid ${COLOR.border}`,
-    transition: "background 0.1s",
-  },
-  dropdownItemActive: {
-    background: COLOR.primaryLight,
-  },
-  itemName: { fontSize: "14px", color: COLOR.text, fontWeight: 500 },
-  itemPrice: { fontSize: "13px", color: COLOR.primary, fontWeight: 600, whiteSpace: "nowrap", marginLeft: "8px" },
-  noResults: { padding: "24px", textAlign: "center", color: COLOR.muted, fontSize: "14px" },
-  // Add row
-  addRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
-    marginTop: "14px",
-    alignItems: "end",
-  },
-  qtyGroup: { display: "flex", flexDirection: "column", gap: "4px" },
-  priceGroup: { display: "flex", flexDirection: "column", gap: "4px" },
+  searchBox: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0 },
+  searchIcon: { fontSize: 14, opacity: 0.6 },
+  searchInput: { flex: 1, border: "none", background: "transparent", color: "var(--text)", fontSize: 14, outline: "none" },
+  clearBtn: { border: "none", background: "var(--bg3)", color: "var(--muted)", borderRadius: 6, width: 24, height: 24, cursor: "pointer" },
+  dropdownList: { overflowY: "auto", padding: "4px 0" },
+  noResults: { padding: "24px 12px", textAlign: "center", color: "var(--muted)", fontSize: 13 },
+  categoryHeader: { fontSize: 11, fontWeight: 700, color: "var(--green)", padding: "8px 14px 4px", textTransform: "uppercase", letterSpacing: 0.4 },
+  dropdownItem: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", cursor: "pointer", gap: 10, minHeight: 44 },
+  dropdownItemActive: { background: "var(--green-dim)" },
+  itemName: { fontSize: 13.5, color: "var(--text)", flex: 1 },
+  itemPrice: { fontSize: 12.5, color: "var(--muted)", whiteSpace: "nowrap" },
+
+  addRow: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14, alignItems: "flex-end" },
+  qtyGroup: { display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" },
+  priceGroup: { display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" },
   qtyInput: {
-    border: `2px solid ${COLOR.primary}`,
-    borderRadius: "10px",
-    padding: "13px 14px",
-    fontSize: "20px",
-    fontWeight: 700,
-    color: COLOR.text,
-    outline: "none",
-    textAlign: "center",
-    width: "100%",
-    boxSizing: "border-box",
-    background: COLOR.primaryLight,
+    padding: "13px 12px", borderRadius: 8, border: "1.5px solid var(--green)", background: "var(--bg2)",
+    color: "var(--text)", fontSize: 16, fontWeight: 600, outline: "none", minHeight: 48,
   },
   addBtn: {
-    gridColumn: "1 / -1",
-    background: COLOR.primary,
-    color: "#fff",
-    border: "none",
-    borderRadius: "12px",
-    padding: "15px",
-    fontSize: "16px",
-    fontWeight: 700,
-    cursor: "pointer",
-    boxShadow: "0 3px 12px rgba(230,126,34,0.4)",
-    transition: "transform 0.1s, box-shadow 0.1s",
-    letterSpacing: "0.3px",
+    padding: "13px 20px", borderRadius: 8, border: "none", background: "var(--green)", color: "#0a1a0a",
+    fontWeight: 700, fontSize: 14, cursor: "pointer", minHeight: 48, flex: "1 1 140px",
   },
-  addBtnDisabled: {
-    background: "#bdc3c7",
-    boxShadow: "none",
-    cursor: "not-allowed",
-  },
-  previewBadge: {
-    marginTop: "10px",
-    background: "#eafaf1",
-    border: "1px solid #82e0aa",
-    borderRadius: "8px",
-    padding: "8px 12px",
-    fontSize: "13px",
-    color: COLOR.success,
-    fontWeight: 600,
-    textAlign: "center",
-  },
-  // Cart
+  addBtnDisabled: { background: "var(--bg3)", color: "var(--muted)", cursor: "default" },
+
+  previewBadge: { marginTop: 10, fontSize: 12.5, color: "var(--green)", background: "var(--green-dim)", padding: "8px 12px", borderRadius: 8 },
+
+  cartCard: { background: "var(--bg1)", border: "1px solid var(--green)", borderRadius: 14, overflow: "hidden" },
   cartHeader: {
-    width: "100%",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px",
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    textAlign: "left",
+    width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14,
+    background: "var(--green-dim)", border: "none", cursor: "pointer", minHeight: 52,
   },
-  cartHeaderLeft: { display: "flex", alignItems: "center", gap: "10px" },
-  cartIcon: { fontSize: "20px" },
-  cartTitle: { fontSize: "16px", fontWeight: 700, color: COLOR.text },
-  cartHeaderRight: { display: "flex", alignItems: "center", gap: "10px" },
-  cartTotal: { fontSize: "16px", fontWeight: 700, color: COLOR.primary },
-  cartBody: { padding: "0 16px 0" },
-  cartList: { paddingBottom: "8px" },
-  cartItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "10px 0",
-    borderBottom: `1px solid ${COLOR.border}`,
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  cartItemInfo: { flex: 1, minWidth: 0 },
-  cartItemName: { fontSize: "13px", fontWeight: 600, color: COLOR.text, wordBreak: "break-word" },
-  cartItemMeta: { fontSize: "12px", color: COLOR.muted, marginTop: "2px" },
-  cartItemActions: { display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 },
-  qtyBtn: {
-    width: "30px",
-    height: "30px",
-    border: `1.5px solid ${COLOR.border}`,
-    borderRadius: "8px",
-    background: "#fafafa",
-    cursor: "pointer",
-    fontSize: "18px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 700,
-    color: COLOR.text,
-    flexShrink: 0,
-  },
-  qtyDisplay: { fontSize: "15px", fontWeight: 700, color: COLOR.text, minWidth: "24px", textAlign: "center" },
-  cartItemTotal: { fontSize: "13px", fontWeight: 700, color: COLOR.primary, minWidth: "52px", textAlign: "right" },
-  removeBtn: {
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontSize: "16px",
-    padding: "2px",
-    flexShrink: 0,
-  },
-  cartSummary: {
-    background: "#fafafa",
-    borderRadius: "10px",
-    padding: "12px 14px",
-    margin: "8px 0",
-  },
-  summaryRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: "13px",
-    color: COLOR.muted,
-    padding: "3px 0",
-  },
+  cartHeaderLeft: { display: "flex", alignItems: "center", gap: 8 },
+  cartIcon: { fontSize: 16 },
+  cartTitle: { fontSize: 14, fontWeight: 600, color: "var(--text)" },
+  cartHeaderRight: { display: "flex", alignItems: "center", gap: 10 },
+  cartTotal: { fontSize: 14, fontWeight: 700, color: "var(--green)" },
+
+  cartBody: { padding: "0 14px" },
+  cartList: { display: "flex", flexDirection: "column", gap: 8, paddingTop: 12 },
+  cartItem: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)", gap: 10, flexWrap: "wrap" },
+  cartItemInfo: { flex: "1 1 140px" },
+  cartItemName: { fontSize: 13.5, fontWeight: 500, color: "var(--text)" },
+  cartItemMeta: { fontSize: 12, color: "var(--muted)", marginTop: 2 },
+  cartItemActions: { display: "flex", alignItems: "center", gap: 8 },
+  qtyBtn: { width: 32, height: 32, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text)", fontSize: 16, cursor: "pointer" },
+  qtyDisplay: { minWidth: 28, textAlign: "center", fontSize: 13, fontWeight: 600 },
+  cartItemTotal: { fontSize: 13, fontWeight: 700, minWidth: 70, textAlign: "right" },
+  removeBtn: { border: "none", background: "none", color: "var(--red)", cursor: "pointer", fontSize: 14, padding: 8 },
+
+  cartSummary: { padding: "12px 0", borderTop: "1px solid var(--border)", marginTop: 8, display: "flex", flexDirection: "column", gap: 4 },
+  summaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text2)" },
+
   submitBtn: {
-    width: "100%",
-    background: COLOR.success,
-    color: "#fff",
-    border: "none",
-    borderRadius: "12px",
-    padding: "16px",
-    fontSize: "16px",
-    fontWeight: 700,
-    cursor: "pointer",
-    boxShadow: "0 3px 12px rgba(39,174,96,0.35)",
-    marginBottom: "8px",
-    letterSpacing: "0.3px",
+    width: "100%", padding: 15, borderRadius: 10, border: "none", background: "var(--green)", color: "#0a1a0a",
+    fontWeight: 700, fontSize: 15, cursor: "pointer", marginTop: 10, minHeight: 50,
   },
-  submitBtnLoading: { opacity: 0.7, cursor: "wait" },
+  submitBtnLoading: { opacity: 0.7, cursor: "default" },
   clearCartBtn: {
-    width: "100%",
-    background: "none",
-    border: `1.5px solid ${COLOR.danger}`,
-    borderRadius: "10px",
-    padding: "11px",
-    fontSize: "14px",
-    fontWeight: 600,
-    color: COLOR.danger,
-    cursor: "pointer",
-    marginBottom: "16px",
+    width: "100%", padding: 12, borderRadius: 10, border: "1px solid var(--border)", background: "transparent",
+    color: "var(--muted)", fontSize: 13, cursor: "pointer", margin: "8px 0 14px", minHeight: 40,
   },
-  // Empty state
-  emptyState: {
-    textAlign: "center",
-    padding: "40px 20px",
-    color: COLOR.muted,
+
+  emptyState: { textAlign: "center", padding: "30px 16px", color: "var(--muted)" },
+  emptyIcon: { fontSize: 36, marginBottom: 8 },
+  emptyText: { fontSize: 13.5, margin: 0 },
+
+  toast: {
+    position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 100,
+    color: "#0a1a0a", padding: "10px 18px", borderRadius: 10, fontWeight: 600, fontSize: 13,
+    display: "flex", alignItems: "center", gap: 6, boxShadow: "0 6px 20px rgba(0,0,0,0.3)", whiteSpace: "nowrap",
   },
-  emptyIcon: { fontSize: "52px", marginBottom: "12px" },
-  emptyText: { fontSize: "15px", lineHeight: 1.5, maxWidth: "260px", margin: "0 auto" },
+  toastIcon: { fontSize: 13 },
+
+  historyHeaderBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 6 },
+
+  statsGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 },
+  statCard: { background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" },
+  statLabel: { fontSize: 10.5, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 },
+  statValue: { fontSize: 16, fontWeight: 700, color: "var(--text)" },
+
+  historyEmpty: { textAlign: "center", padding: "20px 0", color: "var(--muted)", fontSize: 13 },
+  historyErrorBox: { textAlign: "center", padding: "16px 0", color: "var(--amber)", fontSize: 13, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" },
+  retryBtn: { padding: "8px 16px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text)", cursor: "pointer", fontSize: 12 },
+
+  historyList: { display: "flex", flexDirection: "column", gap: 8 },
+  historyRow: { border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" },
+  historyRowMain: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", cursor: "pointer" },
+  historyInvoice: { fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 },
+  statusBadge: { fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, textTransform: "uppercase" },
+  historyMeta: { fontSize: 12, color: "var(--muted)", marginTop: 2 },
+  historyTotal: { fontSize: 14, fontWeight: 700, color: "var(--green)" },
+  historyItemCount: { fontSize: 11, color: "var(--muted)", marginTop: 2 },
+  historyItemsList: { padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--border)", paddingTop: 10 },
+  historyItemRow: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, color: "var(--text2)" },
+  historyNotes: { fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" },
 };

@@ -167,8 +167,11 @@ export default function SessionPage() {
   const [backendSessions, setBackendSessions] = useState(null)
 
   useEffect(() => {
-    if (!token || role !== 'admin') return
-    fetch(`${import.meta.env.VITE_API_URL}/api/sessions`, {
+    if (!token) return
+    // Admins see every cashier's sessions; cashiers see their own —
+    // both endpoints already exist on the backend, just weren't both wired up.
+    const endpoint = role === 'admin' ? '/api/sessions' : '/api/sessions/my'
+    fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(r => r.ok ? r.json() : null)
