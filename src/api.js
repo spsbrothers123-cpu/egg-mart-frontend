@@ -33,6 +33,13 @@ export const getBills   = (params = {}) => {
   return req('GET', `/api/bills${qs ? '?' + qs : ''}`)
 }
 
+// ── Purchases ────────────────────────────────────────────────────────────────
+export const createPurchase = (payload) => req('POST', '/api/purchases', payload)
+export const getPurchases   = (params = {}) => {
+  const qs = new URLSearchParams(params).toString()
+  return req('GET', `/api/purchases${qs ? '?' + qs : ''}`)
+}
+
 // ── Sessions ─────────────────────────────────────────────────────────────────
 export const openSession    = (opening_cash) => req('POST', '/api/sessions/open', { opening_cash })
 export const closeSession   = (id, closing_cash, drawer_counts) =>

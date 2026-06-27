@@ -210,7 +210,7 @@ export default function App() {
     setActive('session-end')
   }
 
-  async function closeSession() {
+  async function closeSession(drawerCounts) {
     if (_sharedActiveSession) {
       // Close on backend if we have a token and a backend session id
       if (token && _sharedActiveSession._backendId) {
@@ -226,7 +226,8 @@ export default function App() {
               'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
-              closing_cash: (_sharedActiveSession.openingCash || 0) + cashTotal,
+              closing_cash:  (_sharedActiveSession.openingCash || 0) + cashTotal,
+              drawer_counts: drawerCounts ?? null,
             }),
           })
         } catch (err) {
@@ -234,7 +235,7 @@ export default function App() {
         }
       }
 
-      const closed = { ..._sharedActiveSession, status: 'closed', endTime: new Date() }
+      const closed = { ..._sharedActiveSession, status: 'closed', endTime: new Date(), drawer_counts: drawerCounts ?? null }
       _sharedSessions     = [closed, ..._sharedSessions]
       _sharedActiveSession = null
       notify()
@@ -316,7 +317,66 @@ export default function App() {
   return newTx
 }
 
-  function addPurchase(purchase) {
+  async function addPurchase(purchase) {
+    // If we have a token, persist to backend (which adds stock)
+    if (token) {
+      try {
+        const payload = {
+          invoice_no:    purchase.invoiceNo || null,
+          supplier:      purchase.supplier  || null,
+          purchase_date: purchase.purchaseDate || new Date().toISOString().slice(0, 10),
+          items: purchase.items.map(i => ({
+            product_id: i.productId ?? null,
+            name:       i.name,
+            pack:       i.pack ?? null,
+            unit_price: i.unitPrice,
+            qty:        i.qty,
+          })),
+          notes: purchase.notes ?? null,
+        }
+
+        const res = await fetch(`${API}/api/purchases`, {
+          method: 'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        })
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          showToast(err.error || 'Failed to save purchase', 'error')
+          return null
+        }
+
+        const saved = await res.json()
+
+        // Add stock locally so UI reflects immediately
+        setProducts(prev => prev.map(p => {
+          const item = purchase.items.find(i => i.productId === p.id)
+          return item ? { ...p, stock: (p.stock ?? 0) + item.qty } : p
+        }))
+
+        const newP = {
+          ...purchase,
+          id:        saved.id,
+          date:      saved.created_at,
+          sessionId: _sharedActiveSession?.id,
+        }
+        _sharedPurchases = [newP, ..._sharedPurchases]
+        notify()
+        showToast('Purchase saved successfully')
+        return newP
+
+      } catch (err) {
+        console.error('Purchase API error:', err)
+        showToast('Server error saving purchase', 'error')
+        return null
+      }
+    }
+
+    // Offline / no-token fallback (local only)
     const newP = {
       ...purchase,
       id:        Date.now(),
@@ -324,8 +384,12 @@ export default function App() {
       sessionId: _sharedActiveSession?.id,
     }
     _sharedPurchases = [newP, ..._sharedPurchases]
+    setProducts(prev => prev.map(p => {
+      const item = purchase.items.find(i => i.productId === p.id)
+      return item ? { ...p, stock: (p.stock ?? 0) + item.qty } : p
+    }))
     notify()
-    showToast('Purchase saved successfully')
+    showToast('Purchase saved (offline mode)')
     return newP
   }
 
