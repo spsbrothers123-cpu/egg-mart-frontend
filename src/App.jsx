@@ -1,20 +1,32 @@
-import { useState, useEffect, createContext, useContext, useCallback } from 'react'
+import { useState, useEffect, createContext, useContext, useCallback, lazy, Suspense } from 'react'
 import LoginPage from './pages/LoginPage'
 import Sidebar   from './components/Sidebar'
-import BillingPage      from './pages/BillingPage'
-import DashboardPage    from './pages/DashboardPage'
-import ProductsPage     from './pages/ProductsPage'
-import PurchasesPage    from './pages/PurchasesPage'
 import SessionStartPage from './pages/SessionStartPage'
-import SessionPage      from './pages/SessionPage'
-import {
-  ReportsPage,
-  InventoryPage,
-  HistoryPage,
-  SettingsPage,
-  SessionEndPage,
-} from './pages/OtherPages'
+
+// Lazy-loaded pages: each becomes its own bundle chunk fetched only when the
+// user navigates to it, instead of all pages shipping in the initial bundle.
+// This cuts first-load JS substantially since Billing/Purchases/OtherPages
+// alone are ~100KB combined of source.
+const BillingPage   = lazy(() => import('./pages/BillingPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ProductsPage  = lazy(() => import('./pages/ProductsPage'))
+const PurchasesPage = lazy(() => import('./pages/PurchasesPage'))
+const SessionPage   = lazy(() => import('./pages/SessionPage'))
+const ReportsPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.ReportsPage })))
+const InventoryPage  = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.InventoryPage })))
+const HistoryPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.HistoryPage })))
+const SettingsPage   = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.SettingsPage })))
+const SessionEndPage = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.SessionEndPage })))
+
 import { PRODUCTS as DEFAULT_PRODUCTS } from './data'
+
+function PageLoadingFallback() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--muted)' }}>
+      Loading…
+    </div>
+  )
+}
 
 export const AppContext = createContext(null)
 export function useApp() { return useContext(AppContext) }
@@ -462,6 +474,8 @@ export default function App() {
     ? <SessionEndPage />
     : (pages[active] ?? <div style={{ padding: 20, color: 'var(--muted)' }}>Coming soon</div>)
 
+  const suspendedMainContent = <Suspense fallback={<PageLoadingFallback />}>{mainContent}</Suspense>
+
   return (
     <AppContext.Provider value={ctxValue}>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -500,7 +514,7 @@ export default function App() {
             onEndSession={endSession}
           />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg0)' }}>
-            {mainContent}
+            {suspendedMainContent}
           </div>
         </div>
 
