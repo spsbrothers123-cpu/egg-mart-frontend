@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../App'
+import { getDashboardSummary } from '../api'
+import { istDateKey, isTodayIST } from '../dateUtils'
 
 export default function DashboardPage() {
   const { transactions: localTx, products, token } = useApp()
   const [transactions, setTransactions] = useState(localTx)
+  // Previously Today's Sales / Total Bills / low-stock count were all
+  // re-derived client-side from the full bills list, duplicating logic the
+  // backend already computes (and caches) in one round trip, and missing
+  // the server-side inventory/low-stock figures. Use it as the source of
+  // truth for those numbers; monthly trend and top products still need the
+  // full bill history, which the summary endpoint intentionally doesn't include.
+  const [summary, setSummary] = useState(null)
+
+  useEffect(() => {
+    if (!token) return
+    getDashboardSummary().then(setSummary).catch(err => console.error('Dashboard summary error:', err))
+  }, [token])
 
   // ── Fix #1: Fetch latest sales from backend (same as Reports/History) ──────
   useEffect(() => {
@@ -28,14 +42,14 @@ export default function DashboardPage() {
   }, [token])
 
   const now     = new Date()
-  const today   = now.toDateString()
   const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
 
-  /* ── Today's stats ── */
-  const todayTx    = transactions.filter(t => new Date(t.date).toDateString() === today)
-  const totalSales = todayTx.reduce((s, t) => s + t.total, 0)
+  /* ── Today's stats — prefer the backend summary when available ── */
+  const todayTx    = transactions.filter(t => isTodayIST(t.date))
+  const totalSales = summary ? summary.sales.revenue     : todayTx.reduce((s, t) => s + t.total, 0)
+  const billCount   = summary ? summary.sales.bill_count : todayTx.length
   const totalItems = todayTx.reduce((s, t) => s + (t.items || 0), 0)
-  const avgBill    = todayTx.length > 0 ? Math.round(totalSales / todayTx.length) : 0
+  const avgBill    = billCount > 0 ? Math.round(totalSales / billCount) : 0
 
   /* ── Monthly bar chart (last 12 months) ── */
   const monthly = Array.from({ length: 12 }, (_, i) => {
@@ -73,7 +87,7 @@ export default function DashboardPage() {
 
   const STATS = [
     { label: "Today's Sales", value: `₹${totalSales.toLocaleString()}`, icon: 'trending-up',  color: 'var(--green)'  },
-    { label: 'Total Bills',   value: todayTx.length,                    icon: 'receipt',      color: 'var(--blue)'   },
+    { label: 'Total Bills',   value: billCount,                         icon: 'receipt',      color: 'var(--blue)'   },
     { label: 'Items Sold',    value: totalItems,                        icon: 'eggs',         color: 'var(--amber)'  },
     { label: 'Avg. Bill',     value: avgBill > 0 ? `₹${avgBill}` : '—', icon: 'chart-bar',  color: 'var(--purple)' },
   ]

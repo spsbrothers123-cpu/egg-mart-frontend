@@ -2,6 +2,8 @@ import { useState, useEffect, createContext, useContext, useCallback, lazy, Susp
 import LoginPage from './pages/LoginPage'
 import Sidebar   from './components/Sidebar'
 import SessionStartPage from './pages/SessionStartPage'
+import { getToken as getPersistedToken, setToken as persistToken, clearToken as clearPersistedToken } from './api'
+import { isTodayIST } from './dateUtils'
 
 // Lazy-loaded pages: each becomes its own bundle chunk fetched only when the
 // user navigates to it, instead of all pages shipping in the initial bundle.
@@ -42,6 +44,15 @@ let _sharedActiveSession = null
 let _invoiceNum         = 1
 let _listeners          = []
 
+// Billing cart / held bills previously lived only in BillingPage's local
+// state, so switching tabs (App.jsx swaps which lazy component is mounted)
+// silently wiped any in-progress cart or held bills with no warning. Lifting
+// them up here means they survive navigating away and back.
+let _sharedCart             = []
+let _sharedHeldBills        = []
+let _sharedBillCustomerName = ''
+let _sharedBillDiscount     = 0
+
 function subscribe(fn) { _listeners.push(fn); return () => { _listeners = _listeners.filter(l => l !== fn) } }
 function notify()      { _listeners.forEach(fn => fn()) }
 
@@ -53,6 +64,10 @@ function getSharedState() {
     sessions:      _sharedSessions,
     activeSession: _sharedActiveSession,
     invoiceNum:    _invoiceNum,
+    cart:             _sharedCart,
+    heldBills:        _sharedHeldBills,
+    billCustomerName: _sharedBillCustomerName,
+    billDiscount:     _sharedBillDiscount,
   }
 }
 
@@ -101,6 +116,40 @@ export default function App() {
     else root.removeAttribute('data-theme')
   }, [theme])
 
+  const loadProducts = useCallback(async (tok) => {
+    const authToken = tok ?? token
+    if (!authToken) return
+    try {
+      const res = await fetch(`${API}/api/products`, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      // Normalize backend shape (price/stock as strings from Postgres numeric)
+      // into the numeric shape the rest of the app already expects.
+      _sharedProducts = (Array.isArray(data) ? data : []).map(p => ({
+        ...p,
+        price: Number(p.price),
+        stock: Number(p.stock),
+        category: p.category_slug ?? p.category ?? 'other',
+      }))
+      notify()
+    } catch (err) {
+      console.error('Failed to load products from backend:', err)
+      // Leave whatever _sharedProducts currently holds (static fallback or
+      // last-known-good) rather than clearing it on a transient network blip.
+    }
+  }, [token])
+
+  // Refetch the real product list whenever we have a token (fresh login or
+  // restored session) — this is the fix for the root-cause bug where the
+  // app ran entirely off the static hardcoded catalog and never called the
+  // backend, so prices/stock shown to the cashier were never the real
+  // values and stock reset to seed defaults on every refresh.
+  useEffect(() => {
+    if (token) loadProducts(token)
+  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Setters ─────────────────────────────────────────────────────────────
   function setTheme(v)        { _sharedTheme = v;        setThemeState(v);        notifySettings() }
   function setProductView(v)  { _sharedProductView = v;  setProductViewState(v);  notifySettings() }
@@ -119,13 +168,90 @@ export default function App() {
     _sharedPurchases = typeof updater === 'function' ? updater(_sharedPurchases) : updater
     notify()
   }
+  function setCart(updater) {
+    _sharedCart = typeof updater === 'function' ? updater(_sharedCart) : updater
+    notify()
+  }
+  function setHeldBills(updater) {
+    _sharedHeldBills = typeof updater === 'function' ? updater(_sharedHeldBills) : updater
+    notify()
+  }
+  function setBillCustomerName(v) {
+    _sharedBillCustomerName = v
+    notify()
+  }
+  function setBillDiscount(v) {
+    _sharedBillDiscount = v
+    notify()
+  }
 
   // ─── Auth ────────────────────────────────────────────────────────────────
   function handleLogin(r, tok) {
     setRole(r)
     setToken(tok || null)                           // store the JWT token
+    persistToken(tok || null)                        // ...and survive a refresh
     setActive(r === 'admin' ? 'dashboard' : 'session-start')
   }
+
+  function handleLogout() {
+    setRole(null)
+    setToken(null)
+    clearPersistedToken()
+    _sharedActiveSession = null
+    notify()
+  }
+
+  // Restore a session on page load if a token survived a refresh. Previously
+  // the token lived only in React state (`let _token = null` in api.js was
+  // never written to storage either), so any refresh silently logged the
+  // user out and dropped whatever was in the cart / held bills.
+  const [restoring, setRestoring] = useState(true)
+  useEffect(() => {
+    const saved = getPersistedToken()
+    if (!saved) { setRestoring(false); return }
+
+    ;(async () => {
+      try {
+        const res = await fetch(`${API}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${saved}` },
+        })
+        if (!res.ok) throw new Error('Session expired')
+        const user = await res.json()
+        setRole(user.role)
+        setToken(saved)
+
+        // If a cashier already has an open session on the backend, resume
+        // straight into billing instead of asking them to open a new one.
+        if (user.role === 'cashier') {
+          try {
+            const curRes = await fetch(`${API}/api/sessions/current`, {
+              headers: { 'Authorization': `Bearer ${saved}` },
+            })
+            if (curRes.ok) {
+              const s = await curRes.json()
+              _sharedActiveSession = {
+                id: s.id, date: s.opened_at, dateStr: new Date(s.opened_at).toDateString(),
+                openingCash: Number(s.opening_cash), startTime: new Date(s.opened_at),
+                transactions: [], status: 'active', _backendId: s.id,
+              }
+              setActive('billing')
+            } else {
+              setActive('session-start')
+            }
+          } catch {
+            setActive('session-start')
+          }
+        } else {
+          setActive('dashboard')
+        }
+      } catch (err) {
+        console.error('Could not restore session:', err)
+        clearPersistedToken()
+      } finally {
+        setRestoring(false)
+      }
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Session management ──────────────────────────────────────────────────
   /**
@@ -151,16 +277,55 @@ export default function App() {
         if (currentRes.ok) {
           const existing = await currentRes.json()
 
-          // ── Step 2: silently close the stale session ──────────────────
+          // ── Step 2: reconcile against actual transactions, then close ────
+          // Previously this assumed zero cash was collected during the
+          // stale session (closing_cash = opening_cash), which misreports
+          // the drawer total if real sales happened before the stale
+          // session was caught. Instead, sum actual cash bills placed
+          // between when the session opened and now.
+          const openedAt = new Date(existing.opened_at)
+          const nowDate   = new Date()
+          const datesToCheck = new Set([
+            openedAt.toISOString().slice(0, 10),
+            nowDate.toISOString().slice(0, 10),
+          ])
+
+          let reconciledCash = 0
+          try {
+            for (const d of datesToCheck) {
+              const billsRes = await fetch(`${API}/api/bills?date=${d}`, { headers })
+              if (!billsRes.ok) continue
+              const bills = await billsRes.json()
+              for (const b of (Array.isArray(bills) ? bills : [])) {
+                const created = new Date(b.created_at)
+                if (
+                  created >= openedAt && created <= nowDate &&
+                  b.payment_method === 'cash' && b.payment_status !== 'voided'
+                ) {
+                  reconciledCash += Number(b.total)
+                }
+              }
+            }
+          } catch (reconcileErr) {
+            console.error('Could not reconcile stale session transactions:', reconcileErr)
+          }
+
+          const reconciledClosingCash = Number(existing.opening_cash ?? 0) + reconciledCash
+
           await fetch(`${API}/api/sessions/${existing.id}/close`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
-              closing_cash:  existing.opening_cash ?? 0,
+              closing_cash:  reconciledClosingCash,
               drawer_counts: null,
             }),
           })
-          showToast('Previous session auto-closed', 'info')
+          showToast(
+            reconciledCash > 0
+              ? `Previous session auto-closed (₹${reconciledCash.toLocaleString()} in cash sales reconciled)`
+              : 'Previous session auto-closed',
+            'info'
+          )
         }
 
         // ── Step 3: open a fresh session on the backend ──────────────────
@@ -421,17 +586,29 @@ export default function App() {
     tax, setTax,
     customerName, setCustomerName,
     products:     shared.products,     setProducts,
+    refreshProducts: loadProducts,
     transactions: shared.transactions, addTransaction, setTransactions,
     purchases:    shared.purchases,    addPurchase, updatePurchase,
     sessions:     shared.sessions,
     session:      shared.activeSession,
     startSession, endSession, closeSession,
     showToast,
+    // Lifted billing cart state — persists across tab navigation.
+    cart:             shared.cart,             setCart,
+    heldBills:        shared.heldBills,        setHeldBills,
+    billCustomerName: shared.billCustomerName, setBillCustomerName,
+    billDiscount:     shared.billDiscount,     setBillDiscount,
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const now     = new Date()
   const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  if (restoring) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg0)', color: 'var(--muted)' }}>
+      Loading…
+    </div>
+  )
 
   if (!role) return (
     <AppContext.Provider value={ctxValue}>
@@ -467,7 +644,7 @@ export default function App() {
   }
   const pages = role === 'admin' ? adminPages : cashierPages
 
-  const todayTx    = shared.transactions.filter(t => new Date(t.date).toDateString() === now.toDateString())
+  const todayTx    = shared.transactions.filter(t => isTodayIST(t.date))
   const totalSales = todayTx.reduce((s, t) => s + t.total, 0)
 
   const mainContent = active === 'session-end'
@@ -485,7 +662,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Sidebar
               role={role} active={active} setActive={setActive}
-              onLogout={() => { setRole(null); setToken(null); _sharedActiveSession = null; notify() }}
+              onLogout={handleLogout}
               session={shared.activeSession}
               onEndSession={endSession}
               hamburgerOnly
@@ -509,7 +686,7 @@ export default function App() {
         <div className="app-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <Sidebar
             role={role} active={active} setActive={setActive}
-            onLogout={() => { setRole(null); setToken(null); _sharedActiveSession = null; notify() }}
+            onLogout={handleLogout}
             session={shared.activeSession}
             onEndSession={endSession}
           />

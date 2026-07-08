@@ -182,7 +182,7 @@ export default function PurchasesPage() {
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [cart, setCart] = useState([]);
-  const [cartOpen, setCartOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(true);
   const [toast, setToast] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -257,7 +257,12 @@ export default function PurchasesPage() {
     });
 
     setToast({ message: `${selectedProduct.name} added!`, type: "success" });
-    setCartOpen(false);
+    // Bug fix: this used to call setCartOpen(false), collapsing the cart
+    // panel (and hiding the Submit Purchase button inside it) every single
+    // time an item was added — so there was effectively no visible way to
+    // submit a purchase. Auto-expand instead so the cart and its submit
+    // button are visible right after adding.
+    setCartOpen(true);
     setSelectedProduct(null);
     setQuantity("");
     setUnitPrice("");

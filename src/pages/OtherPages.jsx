@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { SALES_HISTORY } from '../data'
 import { PageHeader, AddButton, TableHeader, SaleBadge, StatusBadge, Modal, FormField, inputStyle, ModalActions } from '../components/UI'
 import { useApp } from '../App'
-import { CATEGORIES } from '../data'
+import { getCategories, createProduct, updateProduct, deleteProduct } from '../api'
+import { istDateKey, isTodayIST } from '../dateUtils'
 
 /* ─── Reports ─── */
 export function ReportsPage() {
@@ -37,11 +38,10 @@ export function ReportsPage() {
   const card = byMethod('Card')
   const upi  = byMethod('UPI')
 
-  const today = new Date().toDateString()
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
   const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
 
-  const dailyTx   = transactions.filter(t => new Date(t.date).toDateString() === today)
+  const dailyTx   = transactions.filter(t => isTodayIST(t.date))
   const weeklyTx  = transactions.filter(t => new Date(t.date) >= weekAgo)
   const monthlyTx = transactions.filter(t => new Date(t.date) >= monthAgo)
 
@@ -62,8 +62,7 @@ export function ReportsPage() {
 
   const last7 = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i))
-    const ds = d.toDateString()
-    const dayTx = transactions.filter(t => new Date(t.date).toDateString() === ds)
+    const dayTx = transactions.filter(t => istDateKey(t.date) === istDateKey(d))
     return { label: d.toLocaleDateString('en-IN', { weekday: 'short' }), amount: sumAmt(dayTx) }
   })
   const maxBar = Math.max(...last7.map(d => d.amount), 1)
@@ -135,44 +134,87 @@ export function ReportsPage() {
 
 /* ─── Inventory ─── */
 export function InventoryPage() {
-  const { products, setProducts } = useApp()
+  // Previously this page (like ProductsPage) managed products purely in
+  // local/shared React state and never called the backend, so every change
+  // here was invisible to the real system and vanished on refresh.
+  const { products, refreshProducts, showToast } = useApp()
+  const [categories, setCategories] = useState([])
   const [showAdd,  setShowAdd]  = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [form,     setForm]     = useState({ name: '', pack: '', price: '', stock: '', category: 'white', sku: '' })
+  const [saving,   setSaving]   = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [form,     setForm]     = useState({ name: '', pack: '', price: '', stock: '', category_id: '', sku: '' })
+
+  useEffect(() => {
+    getCategories()
+      .then(cats => {
+        setCategories(cats)
+        setForm(f => ({ ...f, category_id: f.category_id || String(cats[0]?.id ?? '') }))
+      })
+      .catch(err => console.error('Failed to load categories:', err))
+  }, [])
 
   const low  = products.filter(p => p.stock <= 50 && p.stock > 20).length
   const crit = products.filter(p => p.stock <= 20).length
 
   function openAdd() {
-    setForm({ name: '', pack: '', price: '', stock: '', category: 'white', sku: '' })
+    // Fix: previously defaulted to category: 'white', which doesn't exist
+    // in the real category list, so new products silently got an
+    // unmatched category. Default to the first real category instead.
+    setForm({ name: '', pack: '', price: '', stock: '', category_id: String(categories[0]?.id ?? ''), sku: '' })
     setEditItem(null); setShowAdd(true)
   }
 
   function openEdit(p) {
-    setForm({ name: p.name, pack: p.pack, price: String(p.price), stock: String(p.stock), category: p.category, sku: p.sku || '' })
+    setForm({
+      name: p.name, pack: p.pack, price: String(p.price), stock: String(p.stock),
+      category_id: String(p.category_id ?? categories.find(c => c.slug === p.category)?.id ?? ''),
+      sku: p.sku || '',
+    })
     setEditItem(p); setShowAdd(true)
   }
 
-  function handleSave() {
-    if (!form.name || !form.price) return
-    if (editItem) {
-      setProducts(prev => prev.map(p => p.id === editItem.id ? {
-        ...p, name: form.name, pack: form.pack,
-        price: parseFloat(form.price), stock: parseInt(form.stock) || 0,
-        category: form.category, sku: form.sku,
-      } : p))
-    } else {
-      setProducts(prev => [...prev, {
-        id: Date.now(), name: form.name, pack: form.pack,
-        price: parseFloat(form.price), stock: parseInt(form.stock) || 0,
-        category: form.category, emoji: '🥚', sku: form.sku,
-      }])
+  async function handleSave() {
+    if (!form.name || !form.price) {
+      showToast('Product name and price are required', 'error')
+      return
     }
-    setShowAdd(false)
+    setSaving(true)
+    try {
+      const payload = {
+        name:  form.name,
+        pack:  form.pack || null,
+        price: parseFloat(form.price),
+        stock: parseInt(form.stock) || 0,
+        category_id: form.category_id ? parseInt(form.category_id) : null,
+        sku:   form.sku || null,
+      }
+      if (editItem) {
+        await updateProduct(editItem.id, payload)
+        showToast('Product updated')
+      } else {
+        await createProduct({ ...payload, emoji: '🥚' })
+        showToast('Product added')
+      }
+      await refreshProducts()
+      setShowAdd(false)
+    } catch (err) {
+      showToast(err.message || 'Failed to save product', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function handleDelete(id) {
-    setProducts(prev => prev.filter(p => p.id !== id))
+  async function handleDelete(product) {
+    try {
+      await deleteProduct(product.id)
+      showToast('Product deleted')
+      await refreshProducts()
+    } catch (err) {
+      showToast(err.message || 'Failed to delete product', 'error')
+    } finally {
+      setConfirmDelete(null)
+    }
   }
 
   return (
@@ -204,7 +246,7 @@ export function InventoryPage() {
             {products.map(p => (
               <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '12px 16px', fontSize: 13 }}>{p.emoji} {p.name}</td>
-                <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--muted)', textTransform: 'capitalize' }}>{p.category}</td>
+                <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--muted)', textTransform: 'capitalize' }}>{p.category_name ?? p.category}</td>
                 <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--muted)' }}>{p.pack}</td>
                 <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>₹{p.price}</td>
                 <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>{p.stock}</td>
@@ -213,7 +255,7 @@ export function InventoryPage() {
                   <button onClick={() => openEdit(p)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--blue)', cursor: 'pointer', fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
                     <i className="ti ti-edit" style={{ marginRight: 4 }}></i>Edit
                   </button>
-                  <button onClick={() => handleDelete(p.id)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--red)', cursor: 'pointer', fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
+                  <button onClick={() => setConfirmDelete(p)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--red)', cursor: 'pointer', fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
                     <i className="ti ti-trash"></i>
                   </button>
                 </td>
@@ -236,11 +278,29 @@ export function InventoryPage() {
           </FormField>
         ))}
         <FormField label="Category">
-          <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inputStyle}>
-            {CATEGORIES.filter(c => c.id !== 'all').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} style={inputStyle}>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </FormField>
-        <ModalActions onCancel={() => setShowAdd(false)} onConfirm={handleSave} confirmLabel={editItem ? 'Save Changes' : 'Add Product'} />
+        <ModalActions onCancel={() => setShowAdd(false)} onConfirm={handleSave} confirmLabel={saving ? 'Saving…' : (editItem ? 'Save Changes' : 'Add Product')} />
+      </Modal>
+
+      {/* Delete confirmation — previously delete fired immediately on click
+          with no "are you sure?" step. */}
+      <Modal show={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete Product?">
+        {confirmDelete && (
+          <>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>
+              Are you sure you want to delete <strong>{confirmDelete.name}</strong>? This can't be undone from here.
+            </div>
+            <ModalActions
+              onCancel={() => setConfirmDelete(null)}
+              onConfirm={() => handleDelete(confirmDelete)}
+              confirmLabel="Delete"
+              confirmColor="var(--red)"
+            />
+          </>
+        )}
       </Modal>
     </div>
   )

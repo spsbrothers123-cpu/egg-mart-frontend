@@ -203,19 +203,20 @@ function ProductEntryPopup({ product, existingItem, onSave, onClose }) {
 
 /* ─── Main BillingPage ─── */
 export default function BillingPage() {
-  const { products, tax, productView, addTransaction } = useApp()
+  const {
+    products, tax, productView, addTransaction, showToast,
+    cart, setCart, heldBills, setHeldBills,
+    billCustomerName: customerName, setBillCustomerName: setCustomerName,
+    billDiscount: discount, setBillDiscount: setDiscount,
+  } = useApp()
 
-  const [cart,        setCart]        = useState([])
-  const [search,      setSearch]      = useState('')
-  const [category,    setCategory]    = useState('all')
-  const [customerName,setCustomerName]= useState('')
-  const [discount,    setDiscount]    = useState(0)
   const [payModal,    setPayModal]    = useState(false)
   const [payMethod,   setPayMethod]   = useState('Cash')
   const [collected,   setCollected]   = useState('')
   const [paidSuccess, setPaidSuccess] = useState(false)
-  const [heldBills,   setHeldBills]   = useState([])
   const [showHeld,    setShowHeld]    = useState(false)
+  const [search,      setSearch]      = useState('')
+  const [category,    setCategory]    = useState('all')
 
   /* ── Mobile/UX state (presentation only — no billing/cart math here) ── */
   const [cartCollapsed, setCartCollapsed] = useState(false) // cart auto-minimizes after each add
@@ -246,6 +247,16 @@ export default function BillingPage() {
 
   /* Save from popup: add or update cart */
   function handlePopupSave(product, qty, price) {
+    // Client-side stock check. Previously stock was only checked server-side
+    // at checkout, so a fully built, discounted cart could fail at the very
+    // last step. `qty` here is the *total* quantity for this line (the popup
+    // edits the whole line, not an increment), so it's compared directly
+    // against the product's known stock.
+    if (qty > (product.stock ?? 0)) {
+      showToast(`Only ${product.stock ?? 0} of "${product.name}" in stock`, 'error')
+      return
+    }
+
     setCart(prev => {
       const ex = prev.find(i => i.id === product.id)
       if (ex) {
