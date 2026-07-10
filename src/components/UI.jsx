@@ -111,17 +111,23 @@ export const inputStyle = {
   color: 'var(--text)', fontSize: 13, outline: 'none',
 }
 
-export function ModalActions({ onCancel, onConfirm, confirmLabel = 'Save', confirmColor = 'var(--green)' }) {
+export function ModalActions({ onCancel, onConfirm, confirmLabel = 'Save', confirmColor = 'var(--green)', disabled = false }) {
+  // `disabled` guards against the double product-insert bug: previously this
+  // button stayed clickable while a save request was in flight, so a fast
+  // double-click (or a slow network) fired two POSTs and created the product
+  // twice. Callers pass their `saving` state in here to block re-entry.
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-      <button onClick={onCancel} style={{
+      <button onClick={onCancel} disabled={disabled} style={{
         padding: '10px', borderRadius: 8, border: '1px solid var(--border)',
-        background: 'var(--bg2)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
+        background: 'var(--bg2)', color: 'var(--text2)', fontSize: 13,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
       }}>Cancel</button>
-      <button onClick={onConfirm} style={{
+      <button onClick={onConfirm} disabled={disabled} style={{
         padding: '10px', borderRadius: 8, background: confirmColor,
         color: confirmColor === 'var(--green)' ? '#0a1a0a' : '#fff',
-        fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+        fontSize: 13, fontWeight: 600, border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.7 : 1,
       }}>{confirmLabel}</button>
     </div>
   )
