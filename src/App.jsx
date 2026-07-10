@@ -502,6 +502,7 @@ export default function App() {
           invoice_no:    purchase.invoiceNo || null,
           supplier:      purchase.supplier  || null,
           purchase_date: purchase.purchaseDate || new Date().toISOString().slice(0, 10),
+          gst_pct:       purchase.gstPct || 0,
           items: purchase.items.map(i => ({
             product_id: i.productId ?? null,
             name:       i.name,

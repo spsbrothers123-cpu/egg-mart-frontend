@@ -60,6 +60,7 @@ export const getPurchases   = (params = {}) => {
   const qs = new URLSearchParams(params).toString()
   return req('GET', `/api/purchases${qs ? '?' + qs : ''}`)
 }
+export const getPurchase    = (id) => req('GET', `/api/purchases/${id}`)
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 export const openSession    = (opening_cash) => req('POST', '/api/sessions/open', { opening_cash })
