@@ -31,12 +31,20 @@ export function ReportsPage() {
       .catch(() => setTransactions(localTx))
   }, [token])
 
-  const byMethod = (method) => transactions.filter(t => t.method === method)
+  // Backend `payment_method` values are lowercase ('cash','card','upi',
+  // 'net_banking','split','credit' — see bills table CHECK constraint), so
+  // matching against capitalized literals here always returned zero results
+  // and every "Sales" card showed ₹0 regardless of real transactions.
+  const byMethod = (method) => transactions.filter(t => t.method?.toLowerCase() === method)
   const sumAmt   = (arr)    => arr.reduce((s, t) => s + t.total, 0)
 
-  const cash = byMethod('Cash')
-  const card = byMethod('Card')
-  const upi  = byMethod('UPI')
+  const cash  = byMethod('cash')
+  const card  = byMethod('card')
+  const upi   = byMethod('upi')
+  // Anything that isn't one of the three primary methods (split/mixed,
+  // credit, net banking) is grouped here so it's still counted and visible
+  // instead of silently vanishing from the payment-method breakdown.
+  const other = transactions.filter(t => !['cash', 'card', 'upi'].includes(t.method?.toLowerCase()))
 
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
   const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
@@ -48,9 +56,10 @@ export function ReportsPage() {
   const totalRevenue = sumAmt(transactions)
 
   const methodCards = [
-    { label: 'Cash Sales',  icon: 'cash',         color: 'var(--green)', txs: cash },
-    { label: 'Card Sales',  icon: 'credit-card',  color: 'var(--blue)',  txs: card },
-    { label: 'UPI Sales',   icon: 'qrcode',       color: 'var(--purple)',txs: upi  },
+    { label: 'Cash Sales',   icon: 'cash',         color: 'var(--green)', txs: cash  },
+    { label: 'Card Sales',   icon: 'credit-card',  color: 'var(--blue)',  txs: card  },
+    { label: 'UPI Sales',    icon: 'qrcode',       color: 'var(--purple)',txs: upi   },
+    { label: 'Other/Mixed',  icon: 'stack-2',      color: 'var(--amber)', txs: other },
   ]
 
   const summaryCards = [
@@ -84,7 +93,7 @@ export function ReportsPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="payment-method-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {methodCards.map(m => (
           <div key={m.label} style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -175,6 +184,7 @@ export function InventoryPage() {
   }
 
   async function handleSave() {
+    if (saving) return // already saving — ignore re-entrant calls (e.g. double-click)
     if (!form.name || !form.price) {
       showToast('Product name and price are required', 'error')
       return
@@ -282,7 +292,7 @@ export function InventoryPage() {
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </FormField>
-        <ModalActions onCancel={() => setShowAdd(false)} onConfirm={handleSave} confirmLabel={saving ? 'Saving…' : (editItem ? 'Save Changes' : 'Add Product')} />
+        <ModalActions onCancel={() => setShowAdd(false)} onConfirm={handleSave} confirmLabel={saving ? 'Saving…' : (editItem ? 'Save Changes' : 'Add Product')} disabled={saving} />
       </Modal>
 
       {/* Delete confirmation — previously delete fired immediately on click

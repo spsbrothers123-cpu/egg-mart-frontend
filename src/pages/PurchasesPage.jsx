@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useApp } from "../App";
-import { getPurchases } from "../api";
+import { getPurchases, getPurchase } from "../api";
 
 const fmt = (n) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -130,7 +130,7 @@ function CartItem({ item, onQtyChange, onRemove }) {
   );
 }
 
-function HistoryRow({ purchase, expanded, onToggle }) {
+function HistoryRow({ purchase, expanded, onToggle, onView }) {
   return (
     <div style={styles.historyRow}>
       <div style={styles.historyRowMain} onClick={onToggle}>
@@ -154,6 +154,12 @@ function HistoryRow({ purchase, expanded, onToggle }) {
           <div style={styles.historyTotal}>{fmt(purchase.subtotal)}</div>
           <div style={styles.historyItemCount}>{purchase.item_count ?? purchase.items?.length ?? 0} item(s)</div>
         </div>
+        <button
+          style={styles.viewBtn}
+          onClick={(e) => { e.stopPropagation(); onView(purchase); }}
+        >
+          View
+        </button>
         <span style={{ ...styles.chevron, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", marginLeft: 8 }}>▾</span>
       </div>
 
@@ -173,6 +179,90 @@ function HistoryRow({ purchase, expanded, onToggle }) {
   );
 }
 
+// Full bill detail modal — Bill Number, Date, Supplier, Invoice Number,
+// Purchased Products, Quantity, Purchase Price, Total Amount, and GST.
+function PurchaseDetailModal({ purchase, onClose }) {
+  if (!purchase) return null;
+  const gstAmt = Number(purchase.gst_amt || 0);
+  const grandTotal = Number(purchase.subtotal || 0) + gstAmt;
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div style={styles.modalTitle}>Purchase Bill #{purchase.id}</div>
+          <button style={styles.modalCloseBtn} onClick={onClose}>✕</button>
+        </div>
+        <div style={styles.modalMetaGrid}>
+          <div><span style={styles.label}>Bill Number</span><div>{purchase.id}</div></div>
+          <div><span style={styles.label}>Date</span><div>{fmtDate(purchase.purchase_date || purchase.created_at)}</div></div>
+          <div><span style={styles.label}>Supplier</span><div>{purchase.supplier || "—"}</div></div>
+          <div><span style={styles.label}>Invoice Number</span><div>{purchase.invoice_no || "—"}</div></div>
+        </div>
+
+        <div style={styles.historyItemsList}>
+          {(purchase.items || []).map((it) => (
+            <div key={it.id} style={styles.historyItemRow}>
+              <span>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
+              <span style={{ color: "var(--muted)" }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
+              <span style={{ fontWeight: 600 }}>{fmt(it.total)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={styles.modalTotalsBox}>
+          <div style={styles.modalTotalRow}><span>Subtotal</span><span>{fmt(purchase.subtotal)}</span></div>
+          <div style={styles.modalTotalRow}><span>GST ({Number(purchase.gst_pct || 0)}%)</span><span>{fmt(gstAmt)}</span></div>
+          <div style={{ ...styles.modalTotalRow, fontWeight: 700, color: "var(--green)" }}><span>Grand Total</span><span>{fmt(grandTotal)}</span></div>
+        </div>
+
+        {purchase.notes && <div style={styles.historyNotes}>📝 {purchase.notes}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Builds a CSV (opens natively in Excel) with one row per purchased item,
+// per the required export columns: Bill Number, Date, Supplier, Product
+// Name, Quantity, Purchase Price, GST, Total, Grand Total.
+function exportPurchasesToExcel(purchases) {
+  const escapeCsv = (val) => {
+    const s = String(val ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["Bill Number", "Date", "Supplier", "Product Name", "Quantity", "Purchase Price", "GST", "Total", "Grand Total"];
+  const rows = [header];
+
+  for (const p of purchases) {
+    const gstAmt = Number(p.gst_amt || 0);
+    const grandTotal = Number(p.subtotal || 0) + gstAmt;
+    const items = p.items && p.items.length ? p.items : [{ name: "(no items loaded)", qty: "", unit_price: "", total: "" }];
+    items.forEach((it, idx) => {
+      rows.push([
+        p.invoice_no || `#${p.id}`,
+        fmtDate(p.purchase_date || p.created_at),
+        p.supplier || "",
+        it.name || "",
+        it.qty ?? "",
+        it.unit_price ?? "",
+        idx === 0 ? gstAmt.toFixed(2) : "",
+        it.total ?? "",
+        idx === 0 ? grandTotal.toFixed(2) : "",
+      ]);
+    });
+  }
+
+  const csv = rows.map((r) => r.map(escapeCsv).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `purchase-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PurchasesPage() {
@@ -189,6 +279,7 @@ export default function PurchasesPage() {
   const [supplier, setSupplier] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [gstPct, setGstPct] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const [history, setHistory] = useState([]);
@@ -196,6 +287,8 @@ export default function PurchasesPage() {
   const [historyError, setHistoryError] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [showHistory, setShowHistory] = useState(true);
+  const [viewPurchase, setViewPurchase] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const qtyRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -281,6 +374,45 @@ export default function PurchasesPage() {
     setCart((prev) => prev.filter((i) => i.product.id !== id));
   };
 
+  // Fetches full line-item detail for a purchase if it isn't already loaded,
+  // caching the result back into `history`. Previously this fetch used
+  // `localStorage.getItem("token")` directly, but the app actually stores the
+  // auth token under the key "egg-mart:token" (see api.js), so this request
+  // always went out with an empty Authorization header and silently failed
+  // — expanding a row, viewing a bill, or exporting never showed line items.
+  const ensureItems = useCallback(async (purchase) => {
+    if (purchase.items) return purchase;
+    try {
+      const full = await getPurchase(purchase.id);
+      setHistory((prev) => prev.map((row) => (row.id === purchase.id ? { ...row, items: full.items } : row)));
+      return { ...purchase, items: full.items };
+    } catch (err) {
+      console.error("Failed to load purchase detail:", err);
+      return purchase;
+    }
+  }, []);
+
+  const handleView = useCallback(async (purchase) => {
+    setViewPurchase(purchase); // show immediately with what we have
+    const full = await ensureItems(purchase);
+    setViewPurchase(full);
+  }, [ensureItems]);
+
+  const handleExport = useCallback(async () => {
+    if (!history.length) return;
+    setExporting(true);
+    try {
+      // Make sure every row has its line items loaded before exporting.
+      const full = await Promise.all(history.map((p) => ensureItems(p)));
+      exportPurchasesToExcel(full);
+    } catch (err) {
+      console.error("Export failed:", err);
+      setToast({ message: "Couldn't export purchase history.", type: "error" });
+    } finally {
+      setExporting(false);
+    }
+  }, [history, ensureItems]);
+
   const cartTotal = cart.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
 
@@ -292,6 +424,7 @@ export default function PurchasesPage() {
       invoiceNo,
       supplier,
       purchaseDate,
+      gstPct: Number(gstPct) || 0,
       items: cart.map((i) => ({
         productId:  i.product.id,
         name:       i.product.name,
@@ -310,6 +443,7 @@ export default function PurchasesPage() {
       setUnitPrice("");
       setSupplier("");
       setInvoiceNo("");
+      setGstPct("");
       loadHistory();
     } else {
       setToast({ message: "Couldn't save purchase — please try again.", type: "error" });
@@ -375,6 +509,19 @@ export default function PurchasesPage() {
               type="date"
               value={purchaseDate}
               onChange={(e) => setPurchaseDate(e.target.value)}
+            />
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>GST % (optional)</label>
+            <input
+              style={styles.input}
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="0"
+              value={gstPct}
+              onChange={(e) => setGstPct(e.target.value)}
             />
           </div>
         </div>
@@ -512,10 +659,22 @@ export default function PurchasesPage() {
       )}
 
       <div style={styles.card}>
-        <button style={styles.historyHeaderBtn} onClick={() => setShowHistory((s) => !s)}>
-          <label style={{ ...styles.sectionLabel, margin: 0 }}>📜 Purchase History</label>
-          <span style={{ ...styles.chevron, transform: showHistory ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
-        </button>
+        <div style={styles.historyTopRow}>
+          <button style={styles.historyHeaderBtn} onClick={() => setShowHistory((s) => !s)}>
+            <label style={{ ...styles.sectionLabel, margin: 0 }}>📜 Purchase History</label>
+            <span style={{ ...styles.chevron, transform: showHistory ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+          </button>
+          {/* Admin-only — this whole page is already hidden from Cashier
+              accounts (see Sidebar.jsx CASHIER_NAV), so no separate check
+              is needed here. */}
+          <button
+            style={styles.exportBtn}
+            onClick={handleExport}
+            disabled={exporting || historyLoading || !history.length}
+          >
+            {exporting ? "Exporting…" : "⬇ Export to Excel"}
+          </button>
+        </div>
 
         {showHistory && (
           <>
@@ -554,25 +713,14 @@ export default function PurchasesPage() {
                     key={p.id}
                     purchase={p}
                     expanded={expandedId === p.id}
+                    onView={handleView}
                     onToggle={async () => {
                       if (expandedId === p.id) {
                         setExpandedId(null);
                         return;
                       }
                       setExpandedId(p.id);
-                      if (!p.items) {
-                        try {
-                          const full = await fetch(
-                            `${import.meta.env.VITE_API_URL}/api/purchases/${p.id}`,
-                            { headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` } }
-                          ).then((r) => (r.ok ? r.json() : null));
-                          if (full) {
-                            setHistory((prev) => prev.map((row) => (row.id === p.id ? { ...row, items: full.items } : row)));
-                          }
-                        } catch {
-                          // Row just won't show line-item detail this time
-                        }
-                      }
+                      await ensureItems(p);
                     }}
                   />
                 ))}
@@ -581,6 +729,8 @@ export default function PurchasesPage() {
           </>
         )}
       </div>
+
+      <PurchaseDetailModal purchase={viewPurchase} onClose={() => setViewPurchase(null)} />
     </div>
   );
 }
@@ -590,7 +740,11 @@ export default function PurchasesPage() {
 // the standalone light theme this page previously used in isolation.
 
 const styles = {
-  page: { padding: 16, paddingBottom: 40, maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 },
+  page: {
+    flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch",
+    padding: 16, paddingBottom: 40, maxWidth: 720, margin: "0 auto",
+    display: "flex", flexDirection: "column", gap: 14,
+  },
 
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
   title: { fontSize: 20, fontWeight: 700, margin: 0, color: "var(--text)" },
@@ -704,7 +858,13 @@ const styles = {
   },
   toastIcon: { fontSize: 13 },
 
-  historyHeaderBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 6 },
+  historyHeaderBtn: { flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0 },
+  historyTopRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 6 },
+  exportBtn: {
+    flexShrink: 0, padding: "8px 14px", borderRadius: 8, border: "1px solid var(--green)",
+    background: "var(--green-dim, transparent)", color: "var(--green)", fontSize: 12.5,
+    fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+  },
 
   statsGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 },
   statCard: { background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" },
@@ -726,4 +886,24 @@ const styles = {
   historyItemsList: { padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--border)", paddingTop: 10 },
   historyItemRow: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, color: "var(--text2)" },
   historyNotes: { fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" },
+
+  viewBtn: {
+    flexShrink: 0, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)",
+    background: "var(--bg2)", color: "var(--text)", fontSize: 12, cursor: "pointer",
+  },
+
+  modalOverlay: {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200,
+    display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+  },
+  modalBox: {
+    width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto",
+    background: "var(--bg1)", border: "1px solid var(--border)", borderRadius: 14, padding: 18,
+  },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  modalTitle: { fontSize: 15, fontWeight: 700, color: "var(--text)" },
+  modalCloseBtn: { background: "none", border: "none", color: "var(--muted)", fontSize: 16, cursor: "pointer" },
+  modalMetaGrid: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginBottom: 14, fontSize: 13 },
+  modalTotalsBox: { marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6 },
+  modalTotalRow: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text2)" },
 };

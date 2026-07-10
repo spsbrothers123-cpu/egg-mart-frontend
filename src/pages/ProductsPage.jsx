@@ -51,6 +51,7 @@ export default function ProductsPage() {
   }
 
   async function handleSave() {
+    if (saving) return // already saving — ignore re-entrant calls (e.g. double-click)
     if (!form.name.trim() || !form.price) {
       showToast('Product name and price are required', 'error')
       return
@@ -139,6 +140,7 @@ export default function ProductsPage() {
           onCancel={() => setShowAdd(false)}
           onConfirm={handleSave}
           confirmLabel={saving ? 'Saving…' : (editing ? 'Save Changes' : 'Add Product')}
+          disabled={saving}
         />
       </Modal>
 
