@@ -53,6 +53,7 @@ export const getBills   = (params = {}) => {
   return req('GET', `/api/bills${qs ? '?' + qs : ''}`)
 }
 export const voidBill = (id) => req('PATCH', `/api/bills/${id}/void`)
+export const getBill  = (id) => req('GET', `/api/bills/${id}`)
 
 // ── Purchases ────────────────────────────────────────────────────────────────
 export const createPurchase = (payload) => req('POST', '/api/purchases', payload)

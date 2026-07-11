@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import * as XLSX from 'xlsx'
 import { SALES_HISTORY } from '../data'
 import { PageHeader, AddButton, TableHeader, SaleBadge, StatusBadge, Modal, FormField, inputStyle, ModalActions } from '../components/UI'
 import { useApp } from '../App'
-import { getCategories, createProduct, updateProduct, deleteProduct } from '../api'
+import { getCategories, createProduct, updateProduct, deleteProduct, getBill } from '../api'
 import { istDateKey, isTodayIST } from '../dateUtils'
 
 /* ─── Reports ─── */
@@ -317,9 +318,45 @@ export function InventoryPage() {
 }
 
 /* ─── History ─── */
+
+// Builds a genuine .xlsx workbook (not a renamed CSV) for the Billing
+// History table, one row per bill. Mirrors the export pattern already used
+// for Purchase History so both exports behave consistently.
+function exportBillsToExcel(bills) {
+  const header = ['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status']
+  const rows = [header]
+
+  for (const s of bills) {
+    const dt = new Date(s.date)
+    rows.push([
+      s.id,
+      dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      s.customer || '',
+      s.items,
+      s.method || '',
+      Number(s.total) || 0,
+      s.status || '',
+    ])
+  }
+
+  const worksheet = XLSX.utils.aoa_to_sheet(rows)
+  worksheet['!cols'] = [
+    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
+    { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Billing History')
+  XLSX.writeFile(workbook, `billing-history-${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
 export function HistoryPage() {
-  const { transactions: localTx, token } = useApp()
+  const { transactions: localTx, token, role } = useApp()
   const [transactions, setTransactions] = useState(localTx)
+  const [viewBill, setViewBill] = useState(null)     // bill currently shown in the Open Bill modal
+  const [loadingBillId, setLoadingBillId] = useState(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     if (!token) { setTransactions(localTx); return }
@@ -344,20 +381,61 @@ export function HistoryPage() {
 
   const all = transactions
 
+  // Fetches the full bill (with line items) on demand so "Open Bill" shows
+  // exactly what the customer bought, without loading every bill's items
+  // upfront on a page that can list hundreds of rows.
+  const handleOpenBill = useCallback(async (s) => {
+    setLoadingBillId(s.id)
+    try {
+      const full = await getBill(s.id)
+      setViewBill(full)
+    } catch (err) {
+      console.error('Failed to load bill:', err)
+    } finally {
+      setLoadingBillId(null)
+    }
+  }, [])
+
+  const handleExport = useCallback(() => {
+    if (!all.length) return
+    setExporting(true)
+    try {
+      exportBillsToExcel(all)
+    } finally {
+      setExporting(false)
+    }
+  }, [all])
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ fontSize: 18, fontWeight: 600 }}>Billing History</div>
-        <span style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--bg2)', border: '1px solid var(--border)', padding: '4px 10px', borderRadius: 6 }}>
-          {all.length} bill{all.length !== 1 ? 's' : ''} saved
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--bg2)', border: '1px solid var(--border)', padding: '4px 10px', borderRadius: 6 }}>
+            {all.length} bill{all.length !== 1 ? 's' : ''} saved
+          </span>
+          <button
+            onClick={handleExport}
+            disabled={exporting || !all.length}
+            style={{
+              padding: '6px 14px', borderRadius: 8, border: '1px solid var(--green)',
+              background: 'transparent', color: 'var(--green)', fontSize: 12, fontWeight: 600,
+              cursor: exporting || !all.length ? 'not-allowed' : 'pointer',
+              opacity: exporting || !all.length ? 0.6 : 1,
+            }}
+          >
+            {exporting ? 'Exporting…' : '⬇ Export to Excel'}
+          </button>
+        </div>
       </div>
       <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <TableHeader cols={['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status']} />
+          <TableHeader cols={role === 'admin'
+            ? ['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status', '']
+            : ['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status']} />
           <tbody>
             {all.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+              <tr><td colSpan={role === 'admin' ? 9 : 8} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
                 No billing history yet. Complete a sale to see it here.
               </td></tr>
             ) : all.map((s, i) => {
@@ -374,12 +452,63 @@ export function HistoryPage() {
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>₹{s.total}</td>
                   <td style={{ padding: '12px 16px' }}><SaleBadge status={s.status} /></td>
+                  {role === 'admin' && (
+                    <td style={{ padding: '12px 16px' }}>
+                      <button
+                        onClick={() => handleOpenBill(s)}
+                        disabled={loadingBillId === s.id}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)',
+                          background: 'var(--bg3)', color: 'var(--text)', fontSize: 11, fontWeight: 500,
+                          cursor: loadingBillId === s.id ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {loadingBillId === s.id ? 'Loading…' : 'Open Bill'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      <Modal show={!!viewBill} onClose={() => setViewBill(null)} title={viewBill ? `Invoice ${viewBill.invoice_number || viewBill.id}` : ''} width={480}>
+        {viewBill && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+              <span>{new Date(viewBill.created_at).toLocaleString('en-IN')}</span>
+              <span>{viewBill.customer_name || 'Walk-in customer'}</span>
+            </div>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <TableHeader cols={['Product', 'Qty', 'Price', 'Total']} />
+                <tbody>
+                  {(viewBill.items || []).map((it, idx) => (
+                    <tr key={it.id ?? idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 12px', fontSize: 13 }}>{it.name}{it.pack ? ` (${it.pack})` : ''}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 13 }}>{it.qty}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 13 }}>₹{Number(it.price).toFixed(2)}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 13, fontWeight: 600 }}>₹{Number(it.total).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Subtotal</span><span>₹{Number(viewBill.subtotal).toFixed(2)}</span></div>
+              {Number(viewBill.discount_amt) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Discount</span><span>-₹{Number(viewBill.discount_amt).toFixed(2)}</span></div>
+              )}
+              {Number(viewBill.tax_amt) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Tax</span><span>₹{Number(viewBill.tax_amt).toFixed(2)}</span></div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 4 }}><span>Total</span><span>₹{Number(viewBill.total).toFixed(2)}</span></div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -488,7 +617,7 @@ const DENOMINATIONS = [
 ]
 
 export function SessionEndPage() {
-  const { session, transactions, closeSession, setActive } = useApp()
+  const { session, transactions, closeSession, setActive, logout } = useApp()
 
   // ── Step state: 'summary' → 'drawer' → 'done' ──
   const [step, setStep] = useState('summary')
@@ -546,6 +675,11 @@ export function SessionEndPage() {
        50: parseInt(counts[50])  || 0,
     }
     await closeSession(drawerCountsToSave)
+    // The button is labeled "Close & Logout" — actually log out (clear the
+    // persisted token) before reloading, otherwise the reload restores the
+    // cashier's session and lands back on the Open Session page instead of
+    // the login page.
+    logout()
     window.location.reload()
   }
 

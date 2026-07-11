@@ -5,6 +5,7 @@
 // section showing everything that's been saved.
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { useApp } from "../App";
 import { getPurchases, getPurchase } from "../api";
 
@@ -221,14 +222,10 @@ function PurchaseDetailModal({ purchase, onClose }) {
   );
 }
 
-// Builds a CSV (opens natively in Excel) with one row per purchased item,
-// per the required export columns: Bill Number, Date, Supplier, Product
-// Name, Quantity, Purchase Price, GST, Total, Grand Total.
+// Builds a genuine .xlsx workbook (not a renamed CSV) with one row per
+// purchased item, per the required export columns: Bill Number, Date,
+// Supplier, Product Name, Quantity, Purchase Price, GST, Total, Grand Total.
 function exportPurchasesToExcel(purchases) {
-  const escapeCsv = (val) => {
-    const s = String(val ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
   const header = ["Bill Number", "Date", "Supplier", "Product Name", "Quantity", "Purchase Price", "GST", "Total", "Grand Total"];
   const rows = [header];
 
@@ -242,25 +239,26 @@ function exportPurchasesToExcel(purchases) {
         fmtDate(p.purchase_date || p.created_at),
         p.supplier || "",
         it.name || "",
-        it.qty ?? "",
-        it.unit_price ?? "",
-        idx === 0 ? gstAmt.toFixed(2) : "",
-        it.total ?? "",
-        idx === 0 ? grandTotal.toFixed(2) : "",
+        it.qty != null ? Number(it.qty) : "",
+        it.unit_price != null ? Number(it.unit_price) : "",
+        idx === 0 ? Number(gstAmt.toFixed(2)) : "",
+        it.total != null ? Number(it.total) : "",
+        idx === 0 ? Number(grandTotal.toFixed(2)) : "",
       ]);
     });
   }
 
-  const csv = rows.map((r) => r.map(escapeCsv).join(",")).join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `purchase-history-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  // Reasonable column widths so the exported file is readable without the
+  // user having to manually resize every column on open.
+  worksheet["!cols"] = [
+    { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 24 },
+    { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase History");
+  XLSX.writeFile(workbook, `purchase-history-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -629,6 +627,7 @@ export default function PurchasesPage() {
                 <span>{cartCount} units across {cart.length} lines</span>
               </div>
             </div>
+            <div style={{ color: "red", fontSize: 24, fontWeight: 900, padding: 10 }}>TEST12345</div>
 
             <button
               style={{

@@ -392,8 +392,13 @@ export default function App() {
       // Close on backend if we have a token and a backend session id
       if (token && _sharedActiveSession._backendId) {
         try {
+          // Case-insensitive match, consistent with SessionEndPage and
+          // ReportsPage — a previous version of this check compared against
+          // the exact string 'Cash', which silently under-counts the drawer
+          // total the moment the recorded method casing differs (e.g. if it
+          // ever comes back from the backend as lowercase 'cash').
           const cashTotal = (_sharedActiveSession.transactions || [])
-            .filter(t => t.method === 'Cash')
+            .filter(t => t.method?.toLowerCase() === 'cash')
             .reduce((s, t) => s + t.total, 0)
 
           await fetch(`${API}/api/sessions/${_sharedActiveSession._backendId}/close`, {
@@ -593,6 +598,7 @@ export default function App() {
     sessions:     shared.sessions,
     session:      shared.activeSession,
     startSession, endSession, closeSession,
+    logout: handleLogout,
     showToast,
     // Lifted billing cart state — persists across tab navigation.
     cart:             shared.cart,             setCart,
