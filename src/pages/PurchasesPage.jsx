@@ -134,43 +134,47 @@ function CartItem({ item, onQtyChange, onRemove }) {
 function HistoryRow({ purchase, expanded, onToggle, onView }) {
   return (
     <div style={styles.historyRow}>
-      <div style={styles.historyRowMain} onClick={onToggle}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={styles.historyInvoice}>
-            {purchase.invoice_no || `Purchase #${purchase.id}`}
-            {purchase.status && (
-              <span style={{
-                ...styles.statusBadge,
-                background: purchase.status === 'cancelled' ? 'rgba(220,38,38,0.15)' : 'var(--green-dim)',
-                color: purchase.status === 'cancelled' ? 'var(--red)' : 'var(--green)',
-              }}>{purchase.status}</span>
-            )}
+      <div style={styles.historyRowScroll}>
+        <div style={styles.historyRowMain} onClick={onToggle}>
+          <div style={{ flexShrink: 0, minWidth: 160 }}>
+            <div style={{ ...styles.historyInvoice, whiteSpace: 'nowrap' }}>
+              {purchase.invoice_no || `Purchase #${purchase.id}`}
+              {purchase.status && (
+                <span style={{
+                  ...styles.statusBadge,
+                  background: purchase.status === 'cancelled' ? 'rgba(220,38,38,0.15)' : 'var(--green-dim)',
+                  color: purchase.status === 'cancelled' ? 'var(--red)' : 'var(--green)',
+                }}>{purchase.status}</span>
+              )}
+            </div>
+            <div style={{ ...styles.historyMeta, whiteSpace: 'nowrap' }}>
+              {purchase.supplier || "Unknown supplier"} · {fmtDate(purchase.purchase_date || purchase.created_at)}
+              {purchase.created_by_name ? ` · by ${purchase.created_by_name}` : ""}
+            </div>
           </div>
-          <div style={styles.historyMeta}>
-            {purchase.supplier || "Unknown supplier"} · {fmtDate(purchase.purchase_date || purchase.created_at)}
-            {purchase.created_by_name ? ` · by ${purchase.created_by_name}` : ""}
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ ...styles.historyTotal, whiteSpace: 'nowrap' }}>{fmt(purchase.subtotal)}</div>
+            <div style={{ ...styles.historyItemCount, whiteSpace: 'nowrap' }}>{purchase.item_count ?? purchase.items?.length ?? 0} item(s)</div>
           </div>
+          <button
+            style={{ ...styles.viewBtn, flexShrink: 0 }}
+            onClick={(e) => { e.stopPropagation(); onView(purchase); }}
+          >
+            View
+          </button>
+          <span style={{ ...styles.chevron, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", marginLeft: 8, flexShrink: 0 }}>▾</span>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={styles.historyTotal}>{fmt(purchase.subtotal)}</div>
-          <div style={styles.historyItemCount}>{purchase.item_count ?? purchase.items?.length ?? 0} item(s)</div>
-        </div>
-        <button
-          style={styles.viewBtn}
-          onClick={(e) => { e.stopPropagation(); onView(purchase); }}
-        >
-          View
-        </button>
-        <span style={{ ...styles.chevron, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", marginLeft: 8 }}>▾</span>
       </div>
 
       {expanded && purchase.items && (
         <div style={styles.historyItemsList}>
           {purchase.items.map((it) => (
-            <div key={it.id} style={styles.historyItemRow}>
-              <span>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
-              <span style={{ color: "var(--muted)" }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
-              <span style={{ fontWeight: 600 }}>{fmt(it.total)}</span>
+            <div key={it.id} style={styles.historyItemRowScroll}>
+              <div style={styles.historyItemRow}>
+                <span style={{ whiteSpace: 'nowrap', flexShrink: 0, minWidth: 140 }}>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
+                <span style={{ color: "var(--muted)", whiteSpace: 'nowrap', flexShrink: 0 }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmt(it.total)}</span>
+              </div>
             </div>
           ))}
           {purchase.notes && <div style={styles.historyNotes}>📝 {purchase.notes}</div>}
@@ -202,10 +206,12 @@ function PurchaseDetailModal({ purchase, onClose }) {
 
         <div style={styles.historyItemsList}>
           {(purchase.items || []).map((it) => (
-            <div key={it.id} style={styles.historyItemRow}>
-              <span>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
-              <span style={{ color: "var(--muted)" }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
-              <span style={{ fontWeight: 600 }}>{fmt(it.total)}</span>
+            <div key={it.id} style={styles.historyItemRowScroll}>
+              <div style={styles.historyItemRow}>
+                <span style={{ whiteSpace: 'nowrap', flexShrink: 0, minWidth: 140 }}>{it.name}{it.pack ? ` (${it.pack})` : ""}</span>
+                <span style={{ color: "var(--muted)", whiteSpace: 'nowrap', flexShrink: 0 }}>{fmt(it.unit_price)} × {Number(it.qty)}</span>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmt(it.total)}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -897,14 +903,21 @@ const styles = {
 
   historyList: { display: "flex", flexDirection: "column", gap: 8 },
   historyRow: { border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" },
-  historyRowMain: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", cursor: "pointer" },
+  // Each row gets its own contained horizontal scroller — independent of
+  // the page's vertical scroll — so on a narrow screen every field
+  // (invoice, meta, total, item count, View button) stays fully visible
+  // and reachable by swiping left/right, instead of being squeezed or
+  // clipped by the app shell's outer overflow:hidden.
+  historyRowScroll: { overflowX: "auto", WebkitOverflowScrolling: "touch" },
+  historyRowMain: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", cursor: "pointer", width: "max-content", minWidth: "100%" },
   historyInvoice: { fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 },
   statusBadge: { fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, textTransform: "uppercase" },
   historyMeta: { fontSize: 12, color: "var(--muted)", marginTop: 2 },
   historyTotal: { fontSize: 14, fontWeight: 700, color: "var(--green)" },
   historyItemCount: { fontSize: 11, color: "var(--muted)", marginTop: 2 },
   historyItemsList: { padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--border)", paddingTop: 10 },
-  historyItemRow: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, color: "var(--text2)" },
+  historyItemRowScroll: { overflowX: "auto", WebkitOverflowScrolling: "touch" },
+  historyItemRow: { display: "flex", justifyContent: "space-between", gap: 16, fontSize: 12.5, color: "var(--text2)", width: "max-content", minWidth: "100%" },
   historyNotes: { fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" },
 
   viewBtn: {
