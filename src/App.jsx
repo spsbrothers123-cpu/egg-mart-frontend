@@ -15,6 +15,7 @@ const ProductsPage  = lazy(() => import('./pages/ProductsPage'))
 const PurchasesPage = lazy(() => import('./pages/PurchasesPage'))
 const SessionPage   = lazy(() => import('./pages/SessionPage'))
 const ReportsPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.ReportsPage })))
+const CreditsPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.CreditsPage })))
 const InventoryPage  = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.InventoryPage })))
 const HistoryPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.HistoryPage })))
 const SettingsPage   = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.SettingsPage })))
@@ -429,7 +430,7 @@ export default function App() {
   if (token) {
     try {
       const payload = {
-        customer_id:    null,                   // or pass customer_id if you add that
+        customer_id:    tx.customerId ?? null,
         items: tx.cart.map(i => ({
           product_id: i.id,
           name:       i.name,
@@ -439,8 +440,9 @@ export default function App() {
         })),
         discount_pct:   tx.discountPct  || 0,
         tax_pct:        tx.tax          ? (tx.tax / tx.subtotal * 100) : 0,
-        payment_method: tx.method?.toLowerCase() === 'upi'  ? 'upi'
-                       : tx.method?.toLowerCase() === 'card' ? 'card'
+        payment_method: tx.method?.toLowerCase() === 'upi'    ? 'upi'
+                       : tx.method?.toLowerCase() === 'card'   ? 'card'
+                       : tx.method?.toLowerCase() === 'credit' ? 'credit'
                        : 'cash',
         notes: tx.customer !== 'Walk-in Customer' ? tx.customer : null,
       }
@@ -636,6 +638,7 @@ export default function App() {
     products:  <ProductsPage />,
     purchases: <PurchasesPage />,
     inventory: <InventoryPage />,
+    credits:   <CreditsPage />,
     reports:   <ReportsPage />,
     history:   <HistoryPage />,
     sessions:  <SessionPage />,
