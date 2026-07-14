@@ -614,7 +614,7 @@ export default function App() {
   const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   if (restoring) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg0)', color: 'var(--muted)' }}>
+    <div style={{ height: ['100vh', '100dvh'], display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg0)', color: 'var(--muted)' }}>
       Loading…
     </div>
   )
@@ -665,7 +665,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={ctxValue}>
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ height: ['100vh', '100dvh'], display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top bar */}
         <div style={{ height: 48, background: 'var(--bg1)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', flexShrink: 0, gap: 8 }}>
           {/* Hamburger lives here — only visible on mobile via CSS */}
