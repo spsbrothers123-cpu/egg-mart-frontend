@@ -6,6 +6,7 @@ const ADMIN_NAV = [
   { id: 'products',  icon: 'eggs',             label: 'Products'   },
   { id: 'purchases', icon: 'shopping-cart',    label: 'Purchases'  },
   { id: 'inventory', icon: 'box',              label: 'Inventory'  },
+  { id: 'credits',   icon: 'credit-card-pay',  label: 'Credits'    },
   { id: 'reports',   icon: 'chart-bar',        label: 'Reports'    },
   { id: 'history',   icon: 'history',          label: 'History'    },
   { id: 'sessions',  icon: 'calendar-stats',   label: 'Sessions'   },
