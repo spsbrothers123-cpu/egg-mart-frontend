@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { SALES_HISTORY } from '../data'
 import { PageHeader, AddButton, TableHeader, SaleBadge, StatusBadge, Modal, FormField, inputStyle, ModalActions } from '../components/UI'
 import { useApp } from '../App'
-import { getCategories, createProduct, updateProduct, deleteProduct, getBill } from '../api'
+import { getCategories, createProduct, updateProduct, deleteProduct, getBill, getBills, settleCreditBill } from '../api'
 import { istDateKey, isTodayIST } from '../dateUtils'
 
 /* ─── Reports ─── */
@@ -22,7 +22,8 @@ export function ReportsPage() {
           ...b,
           date:     b.created_at,
           total:    parseFloat(b.total),
-          method:   b.payment_method,
+          method:         b.settled_method || b.payment_method,
+          payment_method: b.payment_method,
           customer: b.customer_name,
           status:   b.payment_status,
           items:    b.item_count ?? (b.items?.length ?? 0),
@@ -36,16 +37,27 @@ export function ReportsPage() {
   // 'net_banking','split','credit' — see bills table CHECK constraint), so
   // matching against capitalized literals here always returned zero results
   // and every "Sales" card showed ₹0 regardless of real transactions.
-  const byMethod = (method) => transactions.filter(t => t.method?.toLowerCase() === method)
+  //
+  // `method` here is the *effective* method — for a settled credit bill
+  // that's its settled_method (Cash/UPI/Card), so a credit sale correctly
+  // moves into that method's total once it's paid off. Only still-pending
+  // credit bills (payment_method='credit' AND status='credit') stay out of
+  // the Cash/Card/UPI buckets and show up in the dedicated Credit block below.
+  const isPendingCredit = t => t.payment_method?.toLowerCase() === 'credit' && t.status === 'credit'
+  const byMethod = (method) => transactions.filter(t => !isPendingCredit(t) && t.method?.toLowerCase() === method)
   const sumAmt   = (arr)    => arr.reduce((s, t) => s + t.total, 0)
 
   const cash  = byMethod('cash')
   const card  = byMethod('card')
   const upi   = byMethod('upi')
   // Anything that isn't one of the three primary methods (split/mixed,
-  // credit, net banking) is grouped here so it's still counted and visible
-  // instead of silently vanishing from the payment-method breakdown.
-  const other = transactions.filter(t => !['cash', 'card', 'upi'].includes(t.method?.toLowerCase()))
+  // net banking) is grouped here so it's still counted and visible instead
+  // of silently vanishing from the payment-method breakdown. Pending credit
+  // bills are excluded — they get their own Credit block, not "Other".
+  const other = transactions.filter(t => !isPendingCredit(t) && !['cash', 'card', 'upi'].includes(t.method?.toLowerCase()))
+
+  const pendingCredit    = transactions.filter(isPendingCredit)
+  const pendingCreditAmt = sumAmt(pendingCredit)
 
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
   const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
@@ -57,10 +69,11 @@ export function ReportsPage() {
   const totalRevenue = sumAmt(transactions)
 
   const methodCards = [
-    { label: 'Cash Sales',   icon: 'cash',         color: 'var(--green)', txs: cash  },
-    { label: 'Card Sales',   icon: 'credit-card',  color: 'var(--blue)',  txs: card  },
-    { label: 'UPI Sales',    icon: 'qrcode',       color: 'var(--purple)',txs: upi   },
-    { label: 'Other/Mixed',  icon: 'stack-2',      color: 'var(--amber)', txs: other },
+    { label: 'Cash Sales',   icon: 'cash',         color: 'var(--green)', value: `₹${sumAmt(cash).toLocaleString()}`, sub: `${cash.length} transactions` },
+    { label: 'Card Sales',   icon: 'credit-card',  color: 'var(--blue)',  value: `₹${sumAmt(card).toLocaleString()}`, sub: `${card.length} transactions` },
+    { label: 'UPI Sales',    icon: 'qrcode',       color: 'var(--purple)',value: `₹${sumAmt(upi).toLocaleString()}`,  sub: `${upi.length} transactions`  },
+    { label: 'Credit',       icon: 'notes',        color: 'var(--red)',   value: `₹${pendingCreditAmt.toLocaleString()}`, sub: `${pendingCredit.length} pending bill${pendingCredit.length !== 1 ? 's' : ''}` },
+    { label: 'Other/Mixed',  icon: 'stack-2',      color: 'var(--amber)', value: `₹${sumAmt(other).toLocaleString()}`, sub: `${other.length} transactions` },
   ]
 
   const summaryCards = [
@@ -94,15 +107,15 @@ export function ReportsPage() {
         ))}
       </div>
 
-      <div className="payment-method-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="payment-method-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
         {methodCards.map(m => (
           <div key={m.label} style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <i className={`ti ti-${m.icon}`} style={{ fontSize: 22, color: m.color }}></i>
               <div style={{ fontSize: 13, fontWeight: 600, color: m.color }}>{m.label}</div>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>₹{sumAmt(m.txs).toLocaleString()}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.txs.length} transactions</div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{m.value}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.sub}</div>
           </div>
         ))}
       </div>
@@ -369,7 +382,8 @@ export function HistoryPage() {
           ...b,
           date:     b.created_at,
           total:    parseFloat(b.total),
-          method:   b.payment_method,
+          method:         b.settled_method || b.payment_method,
+          payment_method: b.payment_method,
           customer: b.customer_name,
           status:   b.payment_status,
           items:    b.item_count ?? (b.items?.length ?? 0),
@@ -513,7 +527,154 @@ export function HistoryPage() {
   )
 }
 
-/* ─── Settings ─── */
+/* ─── Credits (Admin only) ───────────────────────────────────────────────
+   Lists outstanding credit bills and lets an admin settle them via Cash /
+   UPI / Card. Settling updates the bill's payment_status to 'paid', frees
+   up the customer's credit limit, and records the settlement so Sales
+   History / Reports pick up the correct payment mode automatically. */
+export function CreditsPage() {
+  const { token, role, showToast } = useApp()
+  const [bills, setBills]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [settleBill, setSettleBill] = useState(null)   // bill currently in the "Mark as Paid" modal
+  const [settleMethod, setSettleMethod] = useState('cash')
+  const [settling, setSettling] = useState(false)
+
+  const loadPending = useCallback(() => {
+    if (!token) return
+    setLoading(true)
+    getBills({ status: 'credit' })
+      .then(rows => setBills(rows || []))
+      .catch(() => showToast('Failed to load credit bills', 'error'))
+      .finally(() => setLoading(false))
+  }, [token])
+
+  useEffect(() => { loadPending() }, [loadPending])
+
+  const totalOutstanding = bills.reduce((s, b) => s + parseFloat(b.total), 0)
+
+  async function confirmSettle() {
+    if (!settleBill) return
+    setSettling(true)
+    try {
+      await settleCreditBill(settleBill.id, settleMethod)
+      setBills(prev => prev.filter(b => b.id !== settleBill.id))
+      showToast(`Bill ${settleBill.invoice_number} marked as paid (${settleMethod.toUpperCase()})`)
+      setSettleBill(null)
+      setSettleMethod('cash')
+    } catch (err) {
+      showToast(err.message || 'Failed to settle credit bill', 'error')
+    } finally {
+      setSettling(false)
+    }
+  }
+
+  // Admin-only page — cashiers should never see or reach this even via
+  // direct navigation state.
+  if (role !== 'admin') {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>
+        You don't have access to this page.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>Credits</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Outstanding credit bills awaiting payment</div>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--bg2)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 8 }}>
+          <span style={{ color: 'var(--red)', fontWeight: 700, fontSize: 14 }}>₹{totalOutstanding.toLocaleString()}</span> outstanding · {bills.length} pending
+        </div>
+      </div>
+
+      <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <TableHeader cols={['Bill Number', 'Customer', 'Date & Time', 'Total Amount', 'Outstanding', 'Status', '']} />
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading…</td></tr>
+            ) : bills.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No outstanding credit bills. 🎉</td></tr>
+            ) : bills.map(b => {
+              const dt = new Date(b.created_at)
+              return (
+                <tr key={b.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 12, fontFamily: "'DM Mono'", color: 'var(--green)' }}>{b.invoice_number}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13 }}>{b.customer_name || 'Walk-in Customer'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--muted)' }}>
+                    {dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} · {dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>₹{Number(b.total).toFixed(2)}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--red)' }}>₹{Number(b.total).toFixed(2)}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, background: '#2a1500', color: 'var(--amber)' }}>Pending</span>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button
+                      onClick={() => { setSettleBill(b); setSettleMethod('cash') }}
+                      style={{
+                        padding: '6px 12px', borderRadius: 6, border: '1px solid var(--green)',
+                        background: 'transparent', color: 'var(--green)', fontSize: 11, fontWeight: 600,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Mark as Paid
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal show={!!settleBill} onClose={() => !settling && setSettleBill(null)} title="Mark Credit Bill as Paid" width={400}>
+        {settleBill && (
+          <div>
+            <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                <span>Bill</span><span style={{ color: 'var(--text)' }}>{settleBill.invoice_number}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                <span>Customer</span><span style={{ color: 'var(--text)' }}>{settleBill.customer_name || 'Walk-in Customer'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 700, color: 'var(--green)', marginTop: 6 }}>
+                <span>Amount Due</span><span>₹{Number(settleBill.total).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Received Via</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {[['Cash', 'cash', 'cash'], ['Card', 'card', 'credit-card'], ['UPI', 'upi', 'qrcode']].map(([label, val, icon]) => (
+                <button key={val} onClick={() => setSettleMethod(val)} style={{
+                  padding: '12px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  border: `1.5px solid ${settleMethod === val ? 'var(--green)' : 'var(--border)'}`,
+                  background: settleMethod === val ? 'var(--green-dim)' : 'var(--bg2)',
+                  color: settleMethod === val ? 'var(--green)' : 'var(--text)',
+                }}>
+                  <i className={`ti ti-${icon}`} style={{ display: 'block', fontSize: 20, marginBottom: 4 }}></i>{label}
+                </button>
+              ))}
+            </div>
+
+            <ModalActions
+              onCancel={() => setSettleBill(null)}
+              onConfirm={confirmSettle}
+              confirmLabel={settling ? 'Saving…' : `Confirm ${settleMethod.toUpperCase()} Payment`}
+              disabled={settling}
+            />
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+
 export function SettingsPage() {
   const { theme, setTheme, productView, setProductView, tax, setTax } = useApp()
   const [storeName, setStoreName] = useState('RBR Egg Mart')

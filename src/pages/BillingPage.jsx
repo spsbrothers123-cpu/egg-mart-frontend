@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { CATEGORIES } from '../data'
 import { Modal, ModalActions } from '../components/UI'
 import { useApp } from '../App'
+import { getCustomers } from '../api'
 
 /* ─── White Egg dynamic pricing ─── */
 function getWhiteEggPrice(qty) {
@@ -218,6 +219,25 @@ export default function BillingPage() {
   const [search,      setSearch]      = useState('')
   const [category,    setCategory]    = useState('all')
 
+  /* Credit payment — requires picking an existing customer so credit_limit /
+     credit_used can be tracked. Customer list is fetched lazily the first
+     time "Credit" is selected, not on every page load. */
+  const [creditCustomers,  setCreditCustomers]  = useState([])
+  const [creditCustomerId, setCreditCustomerId] = useState(null)
+  const [creditSearch,     setCreditSearch]     = useState('')
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
+
+  useEffect(() => {
+    if (payMethod !== 'Credit' || creditCustomers.length > 0) return
+    setLoadingCustomers(true)
+    getCustomers()
+      .then(res => setCreditCustomers(res?.data ?? []))
+      .catch(() => showToast('Failed to load customers', 'error'))
+      .finally(() => setLoadingCustomers(false))
+  }, [payMethod])
+
+  const selectedCreditCustomer = creditCustomers.find(c => c.id === creditCustomerId) || null
+
   /* ── Mobile/UX state (presentation only — no billing/cart math here) ── */
   const [cartCollapsed, setCartCollapsed] = useState(false) // cart auto-minimizes after each add
   const [justAdded,     setJustAdded]     = useState(null)  // brief "Product added" confirmation
@@ -288,9 +308,22 @@ export default function BillingPage() {
   const effectiveName = customerName.trim() || 'Walk-in Customer'
 
   async function handlePay() {
+    if (payMethod === 'Credit') {
+      if (!selectedCreditCustomer) {
+        showToast('Select a customer for the credit sale', 'error')
+        return
+      }
+      const available = Number(selectedCreditCustomer.credit_limit) - Number(selectedCreditCustomer.credit_used)
+      if (total > available) {
+        showToast(`Credit limit exceeded: ₹${available.toFixed(2)} available for ${selectedCreditCustomer.name}`, 'error')
+        return
+      }
+    }
+
     const tx = {
       date:        new Date(),
-      customer:    effectiveName,
+      customer:    payMethod === 'Credit' ? selectedCreditCustomer.name : effectiveName,
+      customerId:  payMethod === 'Credit' ? selectedCreditCustomer.id : null,
       items:       cart.length,
       total,
       subtotal,
@@ -298,13 +331,14 @@ export default function BillingPage() {
       discount:    discountAmt,
       discountPct: discount,
       method:      payMethod,
-      status:      'paid',
+      status:      payMethod === 'Credit' ? 'credit' : 'paid',
       cart:        [...cart],
     }
     const result = await addTransaction(tx)
     if (result) {
       setCart([]); setDiscount(0); setPayModal(false)
       setCollected(''); setCustomerName(''); setPayMethod('Cash')
+      setCreditCustomerId(null); setCreditSearch('')
       setPaidSuccess(true)
       setTimeout(() => setPaidSuccess(false), 2500)
     }
@@ -633,8 +667,8 @@ export default function BillingPage() {
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Payment Method</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[['Cash', 'cash'], ['Card', 'credit-card'], ['UPI', 'qrcode']].map(([m, icon]) => (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+          {[['Cash', 'cash'], ['Card', 'credit-card'], ['UPI', 'qrcode'], ['Credit', 'notes']].map(([m, icon]) => (
             <button key={m} onClick={() => setPayMethod(m)} style={{
               padding: '12px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500,
               border: `1.5px solid ${payMethod === m ? 'var(--green)' : 'var(--border)'}`,
@@ -646,14 +680,53 @@ export default function BillingPage() {
           ))}
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Amount Received from Customer (₹)</div>
-          <input type="number" value={collected} onChange={e => setCollected(e.target.value)}
-            placeholder={`Enter amount (Bill: ₹${total.toFixed(2)})`}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 15, outline: 'none' }} />
-        </div>
+        {payMethod === 'Credit' && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Customer (required for credit)</div>
+            <input
+              value={creditSearch}
+              onChange={e => { setCreditSearch(e.target.value); setCreditCustomerId(null) }}
+              placeholder={loadingCustomers ? 'Loading customers…' : 'Search customer by name or phone...'}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', marginBottom: 6 }}
+            />
+            {creditSearch && !selectedCreditCustomer && (
+              <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6 }}>
+                {creditCustomers
+                  .filter(c => c.name.toLowerCase().includes(creditSearch.toLowerCase()) || c.phone?.includes(creditSearch))
+                  .slice(0, 8)
+                  .map(c => (
+                    <div key={c.id} onClick={() => { setCreditCustomerId(c.id); setCreditSearch(c.name) }}
+                      style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                      {c.name} {c.phone ? `· ${c.phone}` : ''}
+                      <span style={{ float: 'right', fontSize: 11, color: 'var(--muted)' }}>
+                        ₹{(Number(c.credit_limit) - Number(c.credit_used)).toFixed(0)} available
+                      </span>
+                    </div>
+                  ))}
+                {creditCustomers.filter(c => c.name.toLowerCase().includes(creditSearch.toLowerCase()) || c.phone?.includes(creditSearch)).length === 0 && (
+                  <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted)' }}>No matching customers. Add them under Customers first.</div>
+                )}
+              </div>
+            )}
+            {selectedCreditCustomer && (
+              <div style={{ fontSize: 12, color: 'var(--green)', background: 'var(--green-dim)', borderRadius: 8, padding: '8px 12px' }}>
+                <i className="ti ti-check" style={{ marginRight: 6 }}></i>
+                {selectedCreditCustomer.name} · ₹{(Number(selectedCreditCustomer.credit_limit) - Number(selectedCreditCustomer.credit_used)).toFixed(2)} credit available
+              </div>
+            )}
+          </div>
+        )}
 
-        {collected !== '' && (
+        {payMethod !== 'Credit' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Amount Received from Customer (₹)</div>
+            <input type="number" value={collected} onChange={e => setCollected(e.target.value)}
+              placeholder={`Enter amount (Bill: ₹${total.toFixed(2)})`}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 15, outline: 'none' }} />
+          </div>
+        )}
+
+        {payMethod !== 'Credit' && collected !== '' && (
           <div style={{
             borderRadius: 8, padding: '12px 14px', marginBottom: 12,
             background: balance >= 0 ? 'var(--green-dim)' : '#1a0a0a',
@@ -678,7 +751,8 @@ export default function BillingPage() {
         <ModalActions
           onCancel={() => setPayModal(false)}
           onConfirm={handlePay}
-          confirmLabel={`Confirm ${payMethod} Pay`}
+          confirmLabel={payMethod === 'Credit' ? 'Confirm Credit Sale' : `Confirm ${payMethod} Pay`}
+          disabled={payMethod === 'Credit' && !selectedCreditCustomer}
         />
       </Modal>
 

@@ -271,6 +271,17 @@ export default function PurchasesPage() {
   const [unitPrice, setUnitPrice] = useState("");
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(true);
+  // Root-cause fix for the Submit Purchase button being invisible: the cart
+  // body's expand animation used a hardcoded `maxHeight: 600px`. Once the
+  // cart list + summary + buttons together exceeded 600px (easily happens
+  // with more than a handful of line items — very common on a small mobile
+  // screen where each row wraps taller), the surrounding `overflow: hidden`
+  // silently clipped everything past that point, including the Submit
+  // Purchase button, even though it was still present in the DOM. Measuring
+  // the actual content height and using that (with no hard cap) means the
+  // button is never clipped, regardless of how many items are in the cart.
+  const cartBodyRef = useRef(null);
+  const [cartBodyHeight, setCartBodyHeight] = useState(0);
   const [toast, setToast] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -329,6 +340,14 @@ export default function PurchasesPage() {
     setUnitPrice(String(product.price));
     setQuantity("");
   }, []);
+
+  // Re-measure whenever the cart contents change or the panel opens, so the
+  // expand animation always targets the real content height.
+  useEffect(() => {
+    if (cartBodyRef.current) {
+      setCartBodyHeight(cartBodyRef.current.scrollHeight);
+    }
+  }, [cart, cartOpen]);
 
   const handleAddToCart = useCallback(() => {
     if (!selectedProduct || !quantity || Number(quantity) <= 0) return;
@@ -599,13 +618,16 @@ export default function PurchasesPage() {
             </div>
           </button>
 
-          <div style={{
-            ...styles.cartBody,
-            maxHeight: cartOpen ? "600px" : "0px",
-            opacity: cartOpen ? 1 : 0,
-            overflow: "hidden",
-            transition: "max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease",
-          }}>
+          <div
+            ref={cartBodyRef}
+            style={{
+              ...styles.cartBody,
+              maxHeight: cartOpen ? `${cartBodyHeight || 2000}px` : "0px",
+              opacity: cartOpen ? 1 : 0,
+              overflow: "hidden",
+              transition: "max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease",
+            }}
+          >
             <div style={styles.cartList}>
               {cart.map((item) => (
                 <CartItem
@@ -627,7 +649,6 @@ export default function PurchasesPage() {
                 <span>{cartCount} units across {cart.length} lines</span>
               </div>
             </div>
-            <div style={{ color: "red", fontSize: 24, fontWeight: 900, padding: 10 }}>TEST12345</div>
 
             <button
               style={{
