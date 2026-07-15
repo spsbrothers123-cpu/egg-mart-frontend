@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { CATEGORIES } from '../data'
 import { Modal, ModalActions } from '../components/UI'
 import { useApp } from '../App'
-import { getCustomers } from '../api'
+import { getCustomers, createCustomer } from '../api'
 
 /* ─── White Egg dynamic pricing ─── */
 function getWhiteEggPrice(qty) {
@@ -227,6 +227,13 @@ export default function BillingPage() {
   const [creditSearch,     setCreditSearch]     = useState('')
   const [loadingCustomers, setLoadingCustomers] = useState(false)
 
+  // Inline "add a new customer" mini-form — so a cashier isn't blocked from
+  // giving credit just because the customer hasn't been registered yet.
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [newCustName,     setNewCustName]     = useState('')
+  const [newCustPhone,    setNewCustPhone]    = useState('')
+  const [creatingCustomer, setCreatingCustomer] = useState(false)
+
   useEffect(() => {
     if (payMethod !== 'Credit' || creditCustomers.length > 0) return
     setLoadingCustomers(true)
@@ -237,6 +244,28 @@ export default function BillingPage() {
   }, [payMethod])
 
   const selectedCreditCustomer = creditCustomers.find(c => c.id === creditCustomerId) || null
+
+  async function handleCreateCreditCustomer() {
+    const name = newCustName.trim()
+    if (!name) {
+      showToast('Enter a customer name', 'error')
+      return
+    }
+    setCreatingCustomer(true)
+    try {
+      const customer = await createCustomer({ name, phone: newCustPhone.trim() || null })
+      setCreditCustomers(prev => [...prev, customer])
+      setCreditCustomerId(customer.id)
+      setCreditSearch(customer.name)
+      setShowAddCustomer(false)
+      setNewCustName(''); setNewCustPhone('')
+      showToast(`${customer.name} added`)
+    } catch (err) {
+      showToast(err.message || 'Failed to add customer', 'error')
+    } finally {
+      setCreatingCustomer(false)
+    }
+  }
 
   /* ── Mobile/UX state (presentation only — no billing/cart math here) ── */
   const [cartCollapsed, setCartCollapsed] = useState(false) // cart auto-minimizes after each add
@@ -682,14 +711,53 @@ export default function BillingPage() {
 
         {payMethod === 'Credit' && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Customer (required for credit)</div>
-            <input
-              value={creditSearch}
-              onChange={e => { setCreditSearch(e.target.value); setCreditCustomerId(null) }}
-              placeholder={loadingCustomers ? 'Loading customers…' : 'Search customer by name or phone...'}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', marginBottom: 6 }}
-            />
-            {creditSearch && !selectedCreditCustomer && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Customer (required for credit)</div>
+              <button
+                onClick={() => { setShowAddCustomer(v => !v); setNewCustName(''); setNewCustPhone('') }}
+                style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                {showAddCustomer ? '✕ Cancel' : '+ New Customer'}
+              </button>
+            </div>
+
+            {showAddCustomer ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input
+                  autoFocus
+                  value={newCustName}
+                  onChange={e => setNewCustName(e.target.value)}
+                  placeholder="Customer name"
+                  style={{ width: '100%', padding: '9px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
+                />
+                <input
+                  value={newCustPhone}
+                  onChange={e => setNewCustPhone(e.target.value)}
+                  placeholder="Phone number (optional)"
+                  style={{ width: '100%', padding: '9px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
+                />
+                <button
+                  onClick={handleCreateCreditCustomer}
+                  disabled={creatingCustomer || !newCustName.trim()}
+                  style={{
+                    padding: '9px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    background: (!newCustName.trim() || creatingCustomer) ? 'var(--bg3)' : 'var(--green)',
+                    color: (!newCustName.trim() || creatingCustomer) ? 'var(--muted)' : '#0a1a0a',
+                  }}
+                >
+                  {creatingCustomer ? 'Saving…' : 'Save & Select Customer'}
+                </button>
+              </div>
+            ) : (
+              <input
+                value={creditSearch}
+                onChange={e => { setCreditSearch(e.target.value); setCreditCustomerId(null) }}
+                placeholder={loadingCustomers ? 'Loading customers…' : 'Search customer by name or phone...'}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', marginBottom: 6 }}
+              />
+            )}
+
+            {!showAddCustomer && creditSearch && !selectedCreditCustomer && (
               <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6 }}>
                 {creditCustomers
                   .filter(c => c.name.toLowerCase().includes(creditSearch.toLowerCase()) || c.phone?.includes(creditSearch))
@@ -704,7 +772,9 @@ export default function BillingPage() {
                     </div>
                   ))}
                 {creditCustomers.filter(c => c.name.toLowerCase().includes(creditSearch.toLowerCase()) || c.phone?.includes(creditSearch)).length === 0 && (
-                  <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted)' }}>No matching customers. Add them under Customers first.</div>
+                  <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted)' }}>
+                    No matching customers. Tap "+ New Customer" above to add {creditSearch}.
+                  </div>
                 )}
               </div>
             )}
