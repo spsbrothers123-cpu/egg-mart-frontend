@@ -196,7 +196,7 @@ export default function SessionPage() {
   const showCashier  = role === 'admin'
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 24 }}>
       <div style={{ marginBottom: 22 }}>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
           <i className="ti ti-calendar-stats" style={{ marginRight: 10, color: 'var(--green)' }} />
@@ -252,8 +252,8 @@ export default function SessionPage() {
             No sessions recorded yet.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: 700, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--bg3)' }}>
                   {['Day', 'Date & Time', 'Duration', 'Revenue', 'Status',

@@ -767,7 +767,7 @@ export default function PurchasesPage() {
 
 const styles = {
   page: {
-    flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch",
+    flex: 1, overflowY: "auto", overflowX: "auto", WebkitOverflowScrolling: "touch",
     padding: 16, paddingBottom: 40, maxWidth: 720, margin: "0 auto",
     display: "flex", flexDirection: "column", gap: 14,
   },

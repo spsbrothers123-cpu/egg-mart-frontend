@@ -94,7 +94,7 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="page-content" style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div className="page-content" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 600 }}>Dashboard</div>
         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{dateStr} · Good morning, Admin</div>

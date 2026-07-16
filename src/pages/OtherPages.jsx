@@ -91,7 +91,7 @@ export function ReportsPage() {
   const maxBar = Math.max(...last7.map(d => d.amount), 1)
 
   return (
-    <div className="page-content" style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div className="page-content" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Reports</div>
 
       <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
@@ -242,7 +242,7 @@ export function InventoryPage() {
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <PageHeader title="Inventory" action={
         <div style={{ display: 'flex', gap: 10 }}>
           <AddButton label="Add New Product" onClick={openAdd} />
@@ -264,7 +264,8 @@ export function InventoryPage() {
       </div>
 
       <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
           <TableHeader cols={['Product', 'Category', 'Pack', 'Price', 'Stock', 'Status', 'Actions']} />
           <tbody>
             {products.map(p => (
@@ -287,6 +288,7 @@ export function InventoryPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Modal show={showAdd} onClose={() => setShowAdd(false)} title={editItem ? 'Edit Product' : 'Add New Product'}>
@@ -421,7 +423,7 @@ export function HistoryPage() {
   }, [all])
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ fontSize: 18, fontWeight: 600 }}>Billing History</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -443,7 +445,8 @@ export function HistoryPage() {
         </div>
       </div>
       <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
           <TableHeader cols={role === 'admin'
             ? ['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status', '']
             : ['Invoice', 'Date', 'Time', 'Customer', 'Items', 'Method', 'Total', 'Status']} />
@@ -486,6 +489,7 @@ export function HistoryPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Modal show={!!viewBill} onClose={() => setViewBill(null)} title={viewBill ? `Invoice ${viewBill.invoice_number || viewBill.id}` : ''} width={480}>
@@ -580,7 +584,7 @@ export function CreditsPage() {
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600 }}>Credits</div>
@@ -592,7 +596,8 @@ export function CreditsPage() {
       </div>
 
       <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse' }}>
           <TableHeader cols={['Bill Number', 'Customer', 'Date & Time', 'Total Amount', 'Outstanding', 'Status', '']} />
           <tbody>
             {loading ? (
@@ -630,6 +635,7 @@ export function CreditsPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Modal show={!!settleBill} onClose={() => !settling && setSettleBill(null)} title="Mark Credit Bill as Paid" width={400}>
@@ -687,7 +693,7 @@ export function SettingsPage() {
   const fieldStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', fontSize: 13, outline: 'none' }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Settings</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 

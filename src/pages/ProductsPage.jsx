@@ -97,14 +97,15 @@ export default function ProductsPage() {
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: 20 }}>
       <PageHeader
         title="Products"
         action={<AddButton label="Add Product" onClick={openAdd} />}
       />
 
       <div style={{ background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
           <TableHeader cols={['Product', 'Category', 'Pack', 'Price', 'Stock', 'Status', 'Actions']} />
           <tbody>
             {products.map(p => (
@@ -123,6 +124,7 @@ export default function ProductsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Modal show={showAdd} onClose={() => setShowAdd(false)} title={editing ? 'Edit Product' : 'Add Product'}>
