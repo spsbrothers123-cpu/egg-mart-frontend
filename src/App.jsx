@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, useCallback, lazy, Suspense } from 'react'
-import LoginPage from './pages/LoginPage'
+import AuthFlow from './pages/auth/AuthFlow'
 import Sidebar   from './components/Sidebar'
 import SessionStartPage from './pages/SessionStartPage'
 import { getToken as getPersistedToken, setToken as persistToken, clearToken as clearPersistedToken } from './api'
@@ -14,6 +14,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ProductsPage  = lazy(() => import('./pages/ProductsPage'))
 const PurchasesPage = lazy(() => import('./pages/PurchasesPage'))
 const SessionPage   = lazy(() => import('./pages/SessionPage'))
+const UsersSessionsPage = lazy(() => import('./pages/UsersSessionsPage'))
 const ReportsPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.ReportsPage })))
 const CreditsPage    = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.CreditsPage })))
 const InventoryPage  = lazy(() => import('./pages/OtherPages').then(m => ({ default: m.InventoryPage })))
@@ -443,16 +444,7 @@ export default function App() {
         payment_method: tx.method?.toLowerCase() === 'upi'    ? 'upi'
                        : tx.method?.toLowerCase() === 'card'   ? 'card'
                        : tx.method?.toLowerCase() === 'credit' ? 'credit'
-                       : tx.method?.toLowerCase() === 'split'  ? 'split'
                        : 'cash',
-        // Only present for split payments — each portion keeps its own
-        // method + amount (e.g. [{method:'card',amount:60},{method:'cash',amount:20}])
-        // rather than collapsing to one figure. Requires backend support;
-        // see egg-mart backend contract notes for the `payments` field and
-        // the `split` payment_method value.
-        payments: tx.payments
-          ? tx.payments.map(p => ({ method: p.method.toLowerCase(), amount: p.amount }))
-          : undefined,
         notes: tx.customer !== 'Walk-in Customer' ? tx.customer : null,
       }
 
@@ -630,7 +622,7 @@ export default function App() {
 
   if (!role) return (
     <AppContext.Provider value={ctxValue}>
-      <LoginPage onLogin={handleLogin} />
+      <AuthFlow onLogin={handleLogin} />
       {toast && <Toast toast={toast} />}
     </AppContext.Provider>
   )
@@ -650,7 +642,7 @@ export default function App() {
     credits:   <CreditsPage />,
     reports:   <ReportsPage />,
     history:   <HistoryPage />,
-    sessions:  <SessionPage />,
+    sessions:  <UsersSessionsPage />,
     settings:  <SettingsPage />,
   }
   const cashierPages = {
