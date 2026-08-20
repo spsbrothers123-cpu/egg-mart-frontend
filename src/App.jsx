@@ -443,7 +443,16 @@ export default function App() {
         payment_method: tx.method?.toLowerCase() === 'upi'    ? 'upi'
                        : tx.method?.toLowerCase() === 'card'   ? 'card'
                        : tx.method?.toLowerCase() === 'credit' ? 'credit'
+                       : tx.method?.toLowerCase() === 'split'  ? 'split'
                        : 'cash',
+        // Only present for split payments — each portion keeps its own
+        // method + amount (e.g. [{method:'card',amount:60},{method:'cash',amount:20}])
+        // rather than collapsing to one figure. Requires backend support;
+        // see egg-mart backend contract notes for the `payments` field and
+        // the `split` payment_method value.
+        payments: tx.payments
+          ? tx.payments.map(p => ({ method: p.method.toLowerCase(), amount: p.amount }))
+          : undefined,
         notes: tx.customer !== 'Walk-in Customer' ? tx.customer : null,
       }
 
