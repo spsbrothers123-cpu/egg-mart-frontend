@@ -9,7 +9,7 @@ const ADMIN_NAV = [
   { id: 'credits',   icon: 'credit-card-pay',  label: 'Credits'    },
   { id: 'reports',   icon: 'chart-bar',        label: 'Reports'    },
   { id: 'history',   icon: 'history',          label: 'History'    },
-  { id: 'sessions',  icon: 'calendar-stats',   label: 'Sessions'   },
+  { id: 'sessions',  icon: 'users-group',      label: 'Users & Sessions' },
   { id: 'settings',  icon: 'settings',         label: 'Settings'   },
 ]
 
