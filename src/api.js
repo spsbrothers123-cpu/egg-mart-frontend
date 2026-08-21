@@ -49,6 +49,9 @@ export const login = (username, password) =>
 export const registerAdmin = (payload) =>
   req('POST', '/api/auth/register-admin', payload)
 
+export const registerCashier = (payload) =>
+  req('POST', '/api/auth/register-cashier', payload)
+
 // ── Bills ────────────────────────────────────────────────────────────────────
 export const createBill = (payload) => req('POST', '/api/bills', payload)
 export const getBills   = (params = {}) => {
