@@ -36,7 +36,7 @@ function AdminSignIn({ onLogin }) {
     setLoading(true)
     setErr('')
     try {
-      const data = await login(username.trim(), password)
+      const data = await registerAdmin({ username: username.trim(), password })
       if (data.user.role !== 'admin') {
         setErr('This account is not an admin account')
         setLoading(false)
