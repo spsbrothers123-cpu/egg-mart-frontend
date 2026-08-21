@@ -8,7 +8,7 @@ const DENOMS = [
   { value:  50, label: '₹50',  color: 'var(--purple)', bg: '#1a0f28' },
 ]
 
-function formatDuration(seconds) {
+export function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return '0m'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -16,7 +16,7 @@ function formatDuration(seconds) {
   return `${m}m`
 }
 
-function StatCard({ icon, label, value, sub, color }) {
+export function StatCard({ icon, label, value, sub, color }) {
   return (
     <div style={{ background: 'var(--bg2)', borderRadius: 14, border: '1px solid var(--border)', padding: '20px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
@@ -81,7 +81,7 @@ function DrawerBreakdown({ counts }) {
   )
 }
 
-function SessionRow({ session, index, showCashier, expanded, onToggle }) {
+export function SessionRow({ session, index, showCashier, expanded, onToggle }) {
   const openedAt  = new Date(session.opened_at || session.date)
   const closedAt  = session.closed_at ? new Date(session.closed_at) : null
   const durationSec = session.duration_seconds
