@@ -46,6 +46,9 @@ async function req(method, path, body) {
 export const login = (username, password) =>
   req('POST', '/api/auth/login', { username, password })
 
+export const registerAdmin = (payload) =>
+  req('POST', '/api/auth/register-admin', payload)
+
 // ── Bills ────────────────────────────────────────────────────────────────────
 export const createBill = (payload) => req('POST', '/api/bills', payload)
 export const getBills   = (params = {}) => {
