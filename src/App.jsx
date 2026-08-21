@@ -430,6 +430,13 @@ export default function App() {
   // If we have a token, persist to backend (which deducts stock)
   if (token) {
     try {
+      // BUG FIX: this used to fall through to 'cash' for a Split payment
+      // and never sent the payments[] breakdown at all, so a split sale
+      // was silently recorded as a plain cash bill and the whole
+      // split-payment breakdown the user entered was discarded. 'split'
+      // is now handled explicitly, and its `payments` portions are
+      // lowercased to match the backend's method enum ('cash'/'card'/'upi').
+      const isSplit = tx.method?.toLowerCase() === 'split'
       const payload = {
         customer_id:    tx.customerId ?? null,
         items: tx.cart.map(i => ({
@@ -441,10 +448,17 @@ export default function App() {
         })),
         discount_pct:   tx.discountPct  || 0,
         tax_pct:        tx.tax          ? (tx.tax / tx.subtotal * 100) : 0,
-        payment_method: tx.method?.toLowerCase() === 'upi'    ? 'upi'
+        payment_method: isSplit ? 'split'
+                       : tx.method?.toLowerCase() === 'upi'    ? 'upi'
                        : tx.method?.toLowerCase() === 'card'   ? 'card'
                        : tx.method?.toLowerCase() === 'credit' ? 'credit'
                        : 'cash',
+        ...(isSplit && {
+          payments: (tx.payments || []).map(p => ({
+            method: p.method?.toLowerCase(),
+            amount: parseFloat(p.amount),
+          })),
+        }),
         notes: tx.customer !== 'Walk-in Customer' ? tx.customer : null,
       }
 

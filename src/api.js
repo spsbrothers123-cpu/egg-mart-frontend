@@ -46,31 +46,6 @@ async function req(method, path, body) {
 export const login = (username, password) =>
   req('POST', '/api/auth/login', { username, password })
 
-// Registration — backend contract (not yet confirmed to exist on the
-// server): POST /api/auth/register
-//   Admin:   { username, password, role: 'admin' }
-//   Cashier: { username, password, role: 'cashier', shop_location }
-// Expected response shape mirrors /api/auth/login so the frontend can
-// auto-login on success: { token, user: { id, name, username, role } }.
-// If the backend instead returns just a success message (no token), the
-// signup screens fall back to sending the user to Sign In.
-export const registerAdmin = (username, password) =>
-  req('POST', '/api/auth/register', { username, password, role: 'admin' })
-
-export const registerCashier = (username, password, shopLocation) =>
-  req('POST', '/api/auth/register', { username, password, role: 'cashier', shop_location: shopLocation })
-
-// ── Users (admin: manage cashiers) ──────────────────────────────────────────
-// Backend contract (not yet confirmed to exist on the server):
-//   GET   /api/users?role=cashier  → [{ id, username, name, shop_location, created_at }]
-//   PATCH /api/users/:id           → { name } → updated user
-// Scoped server-side to the cashiers belonging to the authenticated admin.
-export const getUsers = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/users${qs ? '?' + qs : ''}`)
-}
-export const updateUser = (id, payload) => req('PATCH', `/api/users/${id}`, payload)
-
 // ── Bills ────────────────────────────────────────────────────────────────────
 export const createBill = (payload) => req('POST', '/api/bills', payload)
 export const getBills   = (params = {}) => {

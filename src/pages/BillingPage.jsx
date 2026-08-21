@@ -219,15 +219,6 @@ export default function BillingPage() {
   const [search,      setSearch]      = useState('')
   const [category,    setCategory]    = useState('all')
 
-  /* Split payment — bill paid across exactly two portions, each with its
-     own method + amount. Kept separate from the single-payment `collected`
-     flow above so the existing Cash/Card/UPI/Credit path is untouched. */
-  const [splitPayments, setSplitPayments] = useState([
-    { method: 'Cash', amount: '' },
-    { method: 'Card', amount: '' },
-  ])
-  const [lastPaymentSummary, setLastPaymentSummary] = useState(null)
-
   /* Credit payment — requires picking an existing customer so credit_limit /
      credit_used can be tracked. Customer list is fetched lazily the first
      time "Credit" is selected, not on every page load. */
@@ -345,26 +336,6 @@ export default function BillingPage() {
   const balance     = collected ? parseFloat(collected) - total : 0
   const effectiveName = customerName.trim() || 'Walk-in Customer'
 
-  /* ── Split payment helpers ── */
-  // Valid amount = a positive number, at most 2 decimal places, no stray
-  // characters. Rejects negative values, empty strings, and junk input.
-  const AMOUNT_RE = /^\d+(\.\d{1,2})?$/
-  function isValidSplitAmount(str) {
-    return AMOUNT_RE.test(String(str).trim()) && parseFloat(str) > 0
-  }
-  function updateSplitPayment(index, patch) {
-    setSplitPayments(prev => prev.map((p, i) => i === index ? { ...p, ...patch } : p))
-  }
-  const splitAmountsValid = splitPayments.every(p => isValidSplitAmount(p.amount))
-  const splitPaidTotal = splitPayments.reduce(
-    (s, p) => s + (isValidSplitAmount(p.amount) ? parseFloat(p.amount) : 0), 0
-  )
-  // Round to 2dp before comparing so floating-point noise (e.g. 0.1 + 0.2)
-  // never blocks a bill that is actually balanced.
-  const splitRemaining = Math.round((total - splitPaidTotal) * 100) / 100
-  const splitIsBalanced = splitAmountsValid && splitRemaining === 0
-  const canCompleteSplit = splitIsBalanced
-
   async function handlePay() {
     if (payMethod === 'Credit') {
       if (!selectedCreditCustomer) {
@@ -378,25 +349,6 @@ export default function BillingPage() {
       }
     }
 
-    if (payMethod === 'Split') {
-      if (!splitAmountsValid) {
-        showToast('Enter a valid amount for both split payments', 'error')
-        return
-      }
-      if (splitRemaining > 0) {
-        showToast(`Amount short by ₹${splitRemaining.toFixed(2)}`, 'error')
-        return
-      }
-      if (splitRemaining < 0) {
-        showToast(`Amount exceeds bill total by ₹${Math.abs(splitRemaining).toFixed(2)}`, 'error')
-        return
-      }
-    }
-
-    const splitBreakdown = payMethod === 'Split'
-      ? splitPayments.map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
-      : null
-
     const tx = {
       date:        new Date(),
       customer:    payMethod === 'Credit' ? selectedCreditCustomer.name : effectiveName,
@@ -408,22 +360,16 @@ export default function BillingPage() {
       discount:    discountAmt,
       discountPct: discount,
       method:      payMethod,
-      // Each split portion keeps its own method + amount rather than
-      // collapsing to a single generic "Split" figure, so reports/history
-      // can still break the sale down by Cash/Card/UPI later.
-      payments:    splitBreakdown,
       status:      payMethod === 'Credit' ? 'credit' : 'paid',
       cart:        [...cart],
     }
     const result = await addTransaction(tx)
     if (result) {
-      setLastPaymentSummary(payMethod === 'Split' ? splitBreakdown : null)
       setCart([]); setDiscount(0); setPayModal(false)
       setCollected(''); setCustomerName(''); setPayMethod('Cash')
       setCreditCustomerId(null); setCreditSearch('')
-      setSplitPayments([{ method: 'Cash', amount: '' }, { method: 'Card', amount: '' }])
       setPaidSuccess(true)
-      setTimeout(() => { setPaidSuccess(false); setLastPaymentSummary(null) }, 3500)
+      setTimeout(() => setPaidSuccess(false), 2500)
     }
   }
 
@@ -701,17 +647,8 @@ export default function BillingPage() {
 
       {/* Success Toast */}
       {paidSuccess && (
-        <div style={{ position: 'absolute', top: 20, right: 20, background: 'var(--green)', color: '#0a1a0a', padding: '12px 20px', borderRadius: 10, fontWeight: 600, fontSize: 14, zIndex: 100, maxWidth: 260 }}>
-          <div><i className="ti ti-check" style={{ marginRight: 6 }}></i>Payment Successful!</div>
-          {lastPaymentSummary && (
-            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 500 }}>
-              {lastPaymentSummary.map((p, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{p.method}</span><span>₹{p.amount.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div style={{ position: 'absolute', top: 20, right: 20, background: 'var(--green)', color: '#0a1a0a', padding: '12px 20px', borderRadius: 10, fontWeight: 600, fontSize: 14, zIndex: 100 }}>
+          <i className="ti ti-check" style={{ marginRight: 6 }}></i>Payment Successful!
         </div>
       )}
 
@@ -759,10 +696,10 @@ export default function BillingPage() {
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Payment Method</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[['Cash', 'cash'], ['Card', 'credit-card'], ['UPI', 'qrcode'], ['Credit', 'notes'], ['Split', 'divide']].map(([m, icon]) => (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+          {[['Cash', 'cash'], ['Card', 'credit-card'], ['UPI', 'qrcode'], ['Credit', 'notes']].map(([m, icon]) => (
             <button key={m} onClick={() => setPayMethod(m)} style={{
-              padding: '12px 6px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+              padding: '12px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500,
               border: `1.5px solid ${payMethod === m ? 'var(--green)' : 'var(--border)'}`,
               background: payMethod === m ? 'var(--green-dim)' : 'var(--bg2)',
               color: payMethod === m ? 'var(--green)' : 'var(--text)',
@@ -771,72 +708,6 @@ export default function BillingPage() {
             </button>
           ))}
         </div>
-
-        {payMethod === 'Split' && (
-          <div style={{ marginBottom: 16 }}>
-            {splitPayments.map((p, i) => {
-              const validAmt = p.amount === '' ? null : isValidSplitAmount(p.amount)
-              return (
-                <div key={i} style={{
-                  border: '1px solid var(--border)', borderRadius: 8, padding: 10,
-                  marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center',
-                }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', width: 20 }}>{i + 1}</div>
-                  <select
-                    value={p.method}
-                    onChange={e => updateSplitPayment(i, { method: e.target.value })}
-                    style={{
-                      padding: '9px 8px', borderRadius: 6, border: '1px solid var(--border)',
-                      background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', flex: 1,
-                    }}
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="UPI">UPI</option>
-                  </select>
-                  <input
-                    type="text" inputMode="decimal"
-                    value={p.amount}
-                    onChange={e => {
-                      const v = e.target.value
-                      if (v === '' || /^\d*\.?\d{0,2}$/.test(v)) updateSplitPayment(i, { amount: v })
-                    }}
-                    placeholder="Amount"
-                    style={{
-                      padding: '9px 10px', borderRadius: 6,
-                      border: `1px solid ${validAmt === false ? 'var(--red)' : 'var(--border)'}`,
-                      background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none',
-                      flex: 1, textAlign: 'right',
-                    }}
-                  />
-                </div>
-              )
-            })}
-
-            <div style={{
-              borderRadius: 8, padding: '12px 14px', marginTop: 4,
-              background: splitIsBalanced ? 'var(--green-dim)' : '#1a0a0a',
-              border: `1px solid ${splitIsBalanced ? 'var(--green)' : 'var(--red)'}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: 'var(--muted)' }}>Bill Total</span>
-                <span>₹{total.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: 'var(--muted)' }}>Total Paid</span>
-                <span>₹{splitPaidTotal.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700 }}>
-                <span style={{ color: splitIsBalanced ? 'var(--green)' : 'var(--red)' }}>
-                  {splitRemaining === 0 ? 'Balanced' : splitRemaining > 0 ? 'Remaining' : 'Overpaid'}
-                </span>
-                <span style={{ color: splitIsBalanced ? 'var(--green)' : 'var(--red)' }}>
-                  ₹{Math.abs(splitRemaining).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {payMethod === 'Credit' && (
           <div style={{ marginBottom: 16 }}>
@@ -916,7 +787,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {payMethod !== 'Credit' && payMethod !== 'Split' && (
+        {payMethod !== 'Credit' && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Amount Received from Customer (₹)</div>
             <input type="number" value={collected} onChange={e => setCollected(e.target.value)}
@@ -925,7 +796,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {payMethod !== 'Credit' && payMethod !== 'Split' && collected !== '' && (
+        {payMethod !== 'Credit' && collected !== '' && (
           <div style={{
             borderRadius: 8, padding: '12px 14px', marginBottom: 12,
             background: balance >= 0 ? 'var(--green-dim)' : '#1a0a0a',
@@ -950,8 +821,8 @@ export default function BillingPage() {
         <ModalActions
           onCancel={() => setPayModal(false)}
           onConfirm={handlePay}
-          confirmLabel={payMethod === 'Credit' ? 'Confirm Credit Sale' : payMethod === 'Split' ? 'Confirm Split Payment' : `Confirm ${payMethod} Pay`}
-          disabled={(payMethod === 'Credit' && !selectedCreditCustomer) || (payMethod === 'Split' && !canCompleteSplit)}
+          confirmLabel={payMethod === 'Credit' ? 'Confirm Credit Sale' : `Confirm ${payMethod} Pay`}
+          disabled={payMethod === 'Credit' && !selectedCreditCustomer}
         />
       </Modal>
 

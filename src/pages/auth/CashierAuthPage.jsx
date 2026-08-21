@@ -91,8 +91,8 @@ function CashierSignUp({ onLogin, onDone }) {
       setErr('Please fill in all fields, including shop location')
       return
     }
-    if (password.length < 6) {
-      setErr('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setErr('Password must be at least 8 characters')
       return
     }
     setLoading(true)
