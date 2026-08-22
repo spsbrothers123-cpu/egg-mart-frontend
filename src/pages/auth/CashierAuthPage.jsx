@@ -98,7 +98,7 @@ function CashierSignUp({ onLogin, onDone }) {
     setLoading(true)
     setErr('')
     try {
-      const data = await registerCashier(username.trim(), password, shopLocation.trim())
+      const data = await registerCashier({ username: username.trim(), password, shop_location: shopLocation.trim() })
       if (data?.token && data?.user) {
         onLogin(data.user.role, data.token)
         return
