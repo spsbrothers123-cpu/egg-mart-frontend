@@ -106,5 +106,16 @@ export const createCustomer = (payload) => req('POST', '/api/customers', payload
 export const updateCustomer = (id, payload) => req('PUT', `/api/customers/${id}`, payload)
 export const deleteCustomer = (id) => req('DELETE', `/api/customers/${id}`)
 
+// ── Users ────────────────────────────────────────────────────────────────────
+// Backend contract (per UsersSessionsPage.jsx): GET /api/users (supports a
+// ?role= filter, e.g. role=cashier) and PATCH /api/users/:id for partial
+// updates (e.g. { name }). If these routes don't exist on the server yet,
+// callers handle the resulting error gracefully rather than showing fake data.
+export const getUsers   = (params = {}) => {
+  const qs = new URLSearchParams(params).toString()
+  return req('GET', `/api/users${qs ? '?' + qs : ''}`)
+}
+export const updateUser = (id, payload) => req('PATCH', `/api/users/${id}`, payload)
+
 // ── Dashboard ────────────────────────────────────────────────────────────────
 export const getDashboardSummary = () => req('GET', '/api/dashboard/summary')
