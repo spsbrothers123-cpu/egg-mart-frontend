@@ -49,15 +49,8 @@ export const login = (username, password) =>
 export const registerAdmin = (payload) =>
   req('POST', '/api/auth/register-admin', payload)
 
-// Cashier signup goes through the shared /api/auth/register endpoint with
-// role: 'cashier' — there is no separate /register-cashier route on the
-// backend. payload should include { username, password, name?, shop_location }.
 export const registerCashier = (payload) =>
   req('POST', '/api/auth/register', { ...payload, role: 'cashier' })
-
-// ── Users ────────────────────────────────────────────────────────────────────
-export const getUsers   = () => req('GET', '/api/users')
-export const updateUser = (id, payload) => req('PATCH', `/api/users/${id}`, payload)
 
 // ── Bills ────────────────────────────────────────────────────────────────────
 export const createBill = (payload) => req('POST', '/api/bills', payload)
@@ -115,48 +108,3 @@ export const deleteCustomer = (id) => req('DELETE', `/api/customers/${id}`)
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 export const getDashboardSummary = () => req('GET', '/api/dashboard/summary')
-
-// ── Shops (admin) ────────────────────────────────────────────────────────────
-export const getShops   = () => req('GET', '/api/shops')
-export const getShop    = (id) => req('GET', `/api/shops/${id}`)
-export const createShop = (payload) => req('POST', '/api/shops', payload)
-export const updateShop = (id, payload) => req('PUT', `/api/shops/${id}`, payload)
-export const deleteShop = (id) => req('DELETE', `/api/shops/${id}`)
-
-// ── Expenses (admin) ─────────────────────────────────────────────────────────
-export const getExpenses    = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/expenses${qs ? '?' + qs : ''}`)
-}
-export const createExpense  = (payload) => req('POST', '/api/expenses', payload)
-export const updateExpense  = (id, payload) => req('PUT', `/api/expenses/${id}`, payload)
-export const deleteExpense  = (id) => req('DELETE', `/api/expenses/${id}`)
-
-// ── Suppliers (admin) ────────────────────────────────────────────────────────
-export const getSuppliers   = () => req('GET', '/api/suppliers')
-export const getSupplier    = (id) => req('GET', `/api/suppliers/${id}`)
-export const createSupplier = (payload) => req('POST', '/api/suppliers', payload)
-export const updateSupplier = (id, payload) => req('PUT', `/api/suppliers/${id}`, payload)
-export const deleteSupplier = (id) => req('DELETE', `/api/suppliers/${id}`)
-
-// ── Reports (admin) ──────────────────────────────────────────────────────────
-export const getReportSummary  = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/reports/summary${qs ? '?' + qs : ''}`)
-}
-export const getReportRange    = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/reports/range${qs ? '?' + qs : ''}`)
-}
-export const getReportProducts = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/reports/products${qs ? '?' + qs : ''}`)
-}
-export const getReportExpenses = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/reports/expenses${qs ? '?' + qs : ''}`)
-}
-export const getReportPaymentMethods = (params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return req('GET', `/api/reports/payment-methods${qs ? '?' + qs : ''}`)
-}
